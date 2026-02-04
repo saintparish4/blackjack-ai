@@ -1,0 +1,83 @@
+# Build directories
+build/
+out/
+cmake-build-*/
+Build/
+Release/
+Debug/
+x64/
+x86/
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+CTestTestfile.cmake
+Testing/
+_deps/
+compile_commands.json
+
+# Compiled object files
+*.o
+*.obj
+*.lo
+*.slo
+
+# Precompiled headers
+*.gch
+*.pch
+
+# Compiled libraries
+*.a
+*.la
+*.lib
+*.so
+*.so.*
+*.dylib
+*.dll
+
+# Executables
+*.exe
+*.out
+*.app
+run_tests
+
+# clangd
+.clangd
+.clangd/
+.cache/
+
+# VS Code
+.vscode/
+
+# IDE specific
+*.swp
+*.swo
+*~
+.idea/
+*.user
+*.suo
+*.ncb
+*.sdf
+*.opensdf
+*.vcxproj.user
+
+# OS specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Logs
+*.log
+
+# Coverage reports
+*.gcno
+*.gcda
+*.gcov
+coverage/
