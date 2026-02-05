@@ -62,6 +62,16 @@ cd core/build
 ctest --output-on-failure
 ```
 
+## Performance
+
+Reference baseline benchmarks (results vary by hardware/compiler):
+
+| Metric | Result |
+|--------|--------|
+| Game simulation | ~4.3M games/sec |
+| Q-Learning decisions | ~28.7M decisions/sec |
+| Decision latency | ~35 ns/decision |
+
 ## Roadmap
 
 - [x] Core game engine (Card, Deck, Hand, Game logic)

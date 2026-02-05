@@ -4,6 +4,9 @@ project(BlackjackAI VERSION 1.0 LANGUAGES CXX)
 # Export compile commands for clangd
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Skip timestamp checks to avoid clock skew warnings (useful for WSL)
+set(CMAKE_SKIP_TIMESTAMP_CHECK ON)
+
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -12,7 +15,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Compiler flags
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     add_compile_options(-Wall -Wextra -Werror -pedantic)
-    add_compile_options(-O3)  # Optimization for release
+    add_compile_options(-O3 -march=native)  # Optimization for release
 endif()
 
 # Include directories
@@ -35,6 +38,17 @@ if(MSVC)
     target_compile_options(blackjack_game PRIVATE /W4 /WX)
 endif()
 
+# === AI Library ===
+set(AI_SOURCES
+    include/ai/State.cpp
+    include/ai/PolicyTable.cpp
+    include/ai/QLearningAgent.cpp
+)
+
+add_library(blackjack_ai STATIC ${AI_SOURCES})
+target_include_directories(blackjack_ai PUBLIC include)
+target_link_libraries(blackjack_ai PUBLIC blackjack_game)
+
 # Google Test
 include(FetchContent)
 FetchContent_Declare(
@@ -49,10 +63,13 @@ enable_testing()
 # Test executable
 set(TEST_SOURCES
     tests/test_hand.cpp
+    tests/test_game.cpp
+    tests/test_q_learning.cpp
 )
 
 add_executable(run_tests ${TEST_SOURCES})
 target_link_libraries(run_tests
+    blackjack_ai
     blackjack_game
     gtest
     gtest_main
@@ -61,9 +78,21 @@ target_link_libraries(run_tests
 include(GoogleTest)
 gtest_discover_tests(run_tests)
 
-# Benchmark executable (uncomment when scripts/benchmark.cpp is created)
-# add_executable(benchmark scripts/benchmark.cpp)
-# target_link_libraries(benchmark blackjack_game)
+# === Benchmark Executable ===
+add_executable(benchmark scripts/benchmark.cpp)
+target_link_libraries(benchmark blackjack_ai blackjack_game)
 
+# === Build Summary ===
+message(STATUS "=================================")
+message(STATUS "Blackjack AI - Build Configuration")
+message(STATUS "=================================")
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "C++ compiler: ${CMAKE_CXX_COMPILER_ID}")
+message(STATUS "C++ standard: ${CMAKE_CXX_STANDARD}")
+message(STATUS "")
+message(STATUS "Targets:")
+message(STATUS "  - blackjack_game (library)")
+message(STATUS "  - blackjack_ai (library)")
+message(STATUS "  - run_tests (executable)")
+message(STATUS "  - benchmark (executable)")
+message(STATUS "=================================")
