@@ -14,6 +14,9 @@ struct State {
   bool canSplit = false;   // optional; not in basic Q-learning
   bool canDouble = false;
 
+  // Default constructor for terminal/uninitialized states
+  State() : playerTotal(0), dealerUpCard(0), hasUsableAce(false) {}
+
   State(int playerTotal, int dealerUpCard, bool hasUsableAce)
       : playerTotal(playerTotal), dealerUpCard(dealerUpCard),
         hasUsableAce(hasUsableAce) {}

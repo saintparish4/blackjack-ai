@@ -45,7 +45,14 @@ set(AI_SOURCES
     include/ai/QLearningAgent.cpp
 )
 
-add_library(blackjack_ai STATIC ${AI_SOURCES})
+# === Training (depends on AI) ===
+set(TRAINING_SOURCES
+    include/training/Evaluator.cpp
+    include/training/Logger.cpp
+    include/training/Trainer.cpp
+)
+
+add_library(blackjack_ai STATIC ${AI_SOURCES} ${TRAINING_SOURCES})
 target_include_directories(blackjack_ai PUBLIC include)
 target_link_libraries(blackjack_ai PUBLIC blackjack_game)
 
