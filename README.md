@@ -72,6 +72,17 @@ Reference baseline benchmarks (results vary by hardware/compiler):
 | Q-Learning decisions | ~28.7M decisions/sec |
 | Decision latency | ~35 ns/decision |
 
+## Training Results
+
+First test run (Q-Learning, 170k episodes, early stopping). Rules: 6 decks, dealer hits soft 17, blackjack 3:2.
+
+| Metric | First run | Basic strategy (target) |
+|--------|-----------|--------------------------|
+| Win rate | 40.0% | ~43% |
+| Loss rate | 52.2% | ~49% |
+| Push rate | 7.8% | ~8% |
+| Strategy accuracy | 83.2% | 95%+ |
+| States learned | 589 | — |
 ## Roadmap
 
 - [x] Core game engine (Card, Deck, Hand, Game logic)

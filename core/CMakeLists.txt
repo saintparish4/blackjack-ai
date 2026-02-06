@@ -12,6 +12,9 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Threading (used by training library)
+find_package(Threads REQUIRED)
+
 # Compiler flags
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     add_compile_options(-Wall -Wextra -Werror -pedantic)
@@ -45,6 +48,10 @@ set(AI_SOURCES
     include/ai/QLearningAgent.cpp
 )
 
+add_library(blackjack_ai STATIC ${AI_SOURCES})
+target_include_directories(blackjack_ai PUBLIC include)
+target_link_libraries(blackjack_ai PUBLIC blackjack_game)
+
 # === Training (depends on AI) ===
 set(TRAINING_SOURCES
     include/training/Evaluator.cpp
@@ -52,9 +59,9 @@ set(TRAINING_SOURCES
     include/training/Trainer.cpp
 )
 
-add_library(blackjack_ai STATIC ${AI_SOURCES} ${TRAINING_SOURCES})
-target_include_directories(blackjack_ai PUBLIC include)
-target_link_libraries(blackjack_ai PUBLIC blackjack_game)
+add_library(blackjack_training STATIC ${TRAINING_SOURCES})
+target_include_directories(blackjack_training PUBLIC include)
+target_link_libraries(blackjack_training PUBLIC blackjack_ai Threads::Threads)
 
 # Google Test
 include(FetchContent)
@@ -77,6 +84,7 @@ set(TEST_SOURCES
 add_executable(run_tests ${TEST_SOURCES})
 target_link_libraries(run_tests
     blackjack_ai
+    blackjack_training
     blackjack_game
     gtest
     gtest_main
@@ -85,9 +93,19 @@ target_link_libraries(run_tests
 include(GoogleTest)
 gtest_discover_tests(run_tests)
 
+# === Training Executable ===
+add_executable(train scripts/train.cpp)
+target_link_libraries(train blackjack_training) 
+
 # === Benchmark Executable ===
 add_executable(benchmark scripts/benchmark.cpp)
-target_link_libraries(benchmark blackjack_ai blackjack_game)
+target_link_libraries(benchmark blackjack_training)
+
+# Create necessary directories 
+file(MAKE_DIRECTORY ${PROJECT_SOURCE_DIR}/checkpoints)
+file(MAKE_DIRECTORY ${PROJECT_SOURCE_DIR}/logs)
+file(MAKE_DIRECTORY ${PROJECT_SOURCE_DIR}/models)
+file(MAKE_DIRECTORY ${PROJECT_SOURCE_DIR}/analysis) 
 
 # === Build Summary ===
 message(STATUS "=================================")
@@ -100,6 +118,7 @@ message(STATUS "")
 message(STATUS "Targets:")
 message(STATUS "  - blackjack_game (library)")
 message(STATUS "  - blackjack_ai (library)")
+message(STATUS "  - train (executable)")
 message(STATUS "  - run_tests (executable)")
 message(STATUS "  - benchmark (executable)")
 message(STATUS "=================================")
