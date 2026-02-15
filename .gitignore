@@ -51,6 +51,9 @@ run_tests
 # VS Code
 .vscode/
 
+# Cursor
+.cursor/
+
 # IDE specific
 *.swp
 *.swo

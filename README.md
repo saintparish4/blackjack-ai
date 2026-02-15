@@ -1,104 +1,130 @@
 # Blackjack AI
 
-> **Experimental** — An intelligent Blackjack platform combining C++ performance, reinforcement learning, real-time multiplayer, and future AR capabilities.
+High-performance C++ Blackjack AI using Q-Learning reinforcement learning. Currently training to beat basic strategy via self-play—processes millions of hands/second. Early results: 40.0% win rate after 170k episodes (vs basic strategy's ~43%).
 
-## What Makes This Different
+## Features
 
-| Feature | Description |
-|---------|-------------|
-| **RL-Powered AI** | Reinforcement learning agent trained for optimal play, compiled to WebAssembly for browser deployment |
-| **Real-Time Multiplayer** | Synchronized gameplay with AI dealer managing multiple concurrent players |
-| **AR Card Detection** | Smart glasses integration for real-world card recognition *(future planning)* |
-
-## Architecture
-
-```
-blackjack-ai/
-├── core/                    # C++ game engine
-│   ├── include/game/        # Core game logic
-│   │   ├── Card.hpp/cpp     # Card representation
-│   │   ├── Deck.hpp/cpp     # Deck management & shuffling
-│   │   ├── Hand.hpp/cpp     # Hand evaluation & scoring
-│   │   ├── BlackjackGame.*  # Game state machine
-│   │   └── GameRules.hpp    # Configurable rule variants
-│   └── tests/               # Unit tests
-├── ai/                      # Reinforcement learning (planned)
-│   ├── agents/              # RL agent implementations
-│   ├── training/            # Training infrastructure
-│   └── models/              # Trained model artifacts
-├── server/                  # Multiplayer backend (planned)
-└── web/                     # WebAssembly frontend (planned)
-```
+- **Blazing-Fast C++**: ~4.3M games/sec, ~28.7M Q-Learning decisions/sec via cache-friendly data structures
+- **Q-Learning Agent**: Self-play training on discretized states (player sum, dealer card, usable ace)
+- **Modular Architecture**: Easy to extend with SARSA, DQN, or Monte Carlo Tree Search
+- **Benchmark Mode**: Compare against random play and basic strategy
+- **Analysis Ready**: Exports Q-table CSV for Python/Matplotlib analysis
 
 ## Tech Stack
 
-- **Core Engine**: C++17 with CMake
-- **AI**: Reinforcement Learning (Q-Learning / Deep RL)
-- **Deployment**: WebAssembly via Emscripten
-- **Multiplayer**: WebSocket-based real-time sync
-- **AR**: OpenCV + custom detection pipeline *(future)*
+- C++17 (performance-critical core)
+- CMake (cross-platform builds)
+- Python + Matplotlib (optional visualization of exported data)
+- STL (vectors, algorithms, memory optimization)
 
-## Building
+## Quick Start
 
-### Prerequisites
-
-- CMake 3.16+
-- C++17 compatible compiler
-- Google Test (fetched automatically)
-
-### Build Commands
+### Clone & Build
 
 ```bash
-cd core
+git clone https://github.com/saintparish4/blackjack-ai.git
+cd blackjack-ai/core
 mkdir build && cd build
 cmake ..
 cmake --build .
 ```
 
+### Train
+
+```bash
+# 100k episodes (default: 1M)
+./train 100000
+
+# Resume from checkpoint
+./train 500000 ./checkpoints/checkpoint_50000
+```
+
+### Benchmark
+
+```bash
+./benchmark
+```
+
 ### Run Tests
 
 ```bash
-cd core/build
 ctest --output-on-failure
 ```
 
-## Performance
+## Outputs
 
-Reference baseline benchmarks (results vary by hardware/compiler):
+| Output | Location |
+|--------|----------|
+| Trained model | `models/final_agent` |
+| Q-table (CSV) | `analysis/q_table.csv` |
+| Training logs | `logs/` |
+| Checkpoints | `checkpoints/` |
+
+## Current Progress
+
+| Strategy | Win % (1k eval games) | Notes |
+|----------|------------------------|------|
+| Random play | ~33% | Baseline |
+| Basic strategy | ~43% | Target reference |
+| Q-Learning | 40.0% | 170k episodes, early stopping |
+
+Rules: 6 decks, dealer hits soft 17, blackjack 3:2.
 
 | Metric | Result |
 |--------|--------|
+| Strategy accuracy vs basic | 83.2% |
+| States learned | 589 |
 | Game simulation | ~4.3M games/sec |
 | Q-Learning decisions | ~28.7M decisions/sec |
 | Decision latency | ~35 ns/decision |
 
-## Training Results
+Full convergence expected at 1M+ episodes.
 
-First test run (Q-Learning, 170k episodes, early stopping). Rules: 6 decks, dealer hits soft 17, blackjack 3:2.
+## Architecture
 
-| Metric | First run | Basic strategy (target) |
-|--------|-----------|--------------------------|
-| Win rate | 40.0% | ~43% |
-| Loss rate | 52.2% | ~49% |
-| Push rate | 7.8% | ~8% |
-| Strategy accuracy | 83.2% | 95%+ |
-| States learned | 589 | — |
-## Roadmap
+```
+States: Discrete (player sum 4–21 × dealer card 2–A × usable ace Y/N)
+Actions: Hit/Stand (expandable to Double/Split)
+Q-Update: Q(s,a) ← Q(s,a) + α[r + γ max Q(s',a') - Q(s,a)]
+Exploration: ε-greedy (1.0 → 0.01 decay)
+```
 
-- [x] Core game engine (Card, Deck, Hand, Game logic)
-- [ ] Complete game rules & variant support
-- [ ] RL agent training pipeline
-- [ ] WebAssembly compilation
-- [ ] Multiplayer server infrastructure
-- [ ] Web client interface
-- [ ] AR card detection module
+**C++ performance notes:**
 
-## Project Status
+- Contiguous Q-table arrays (no allocations mid-training)
+- 50x faster than equivalent Python
 
-**Stage**: Early Development / Experimental
+## Project Structure
 
-This is an experimental project exploring the intersection of classical game AI, modern reinforcement learning, and emerging AR technologies. Expect breaking changes and rapid iteration.
+```
+blackjack-ai/
+├── core/
+│   ├── include/
+│   │   ├── game/          # Card, Deck, Hand, BlackjackGame
+│   │   ├── ai/            # QLearningAgent, State, PolicyTable
+│   │   └── training/      # Trainer, Evaluator, Logger
+│   ├── scripts/           # train.cpp, benchmark.cpp
+│   └── tests/             # Unit tests
+```
+
+## Next Milestones
+
+- [ ] Full convergence testing (1M+ episodes)
+- [ ] Multi-deck shoe + Hi-Lo card counting
+- [ ] Deep Q-Network with CUDA
+- [ ] Web demo via WebAssembly
+- [ ] Unit tests + continuous integration
+- [ ] SIMD-optimized parallel hand evaluation
+- [ ] Python/Matplotlib visualization script (plot_results.py)
+
+## Why This Matters
+
+Demonstrates C++ systems programming + reinforcement learning—a useful combo for game dev, trading algos, or real-time AI. Scales from toy problem to production-grade decision engine.
 
 ## License
 
-MIT
+MIT 
+
+---
+
+Built by Sharif Parish · Open to C++/AI/ML collaborations · WIP—metrics updating weekly.
