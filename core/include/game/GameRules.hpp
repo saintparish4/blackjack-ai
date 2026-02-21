@@ -22,6 +22,50 @@ struct GameRules {
         }
         return bet * 2;
     }
+
+    /** Rule presets (common house rules). */
+    static GameRules vegasStrip() {
+        GameRules r;
+        r.numDecks = 6;
+        r.dealerHitsSoft17 = false;
+        r.blackjackPayout = 1.5;
+        r.doubleAfterSplit = true;
+        r.surrender = false;
+        return r;
+    }
+    static GameRules downtown() {
+        GameRules r;
+        r.numDecks = 2;
+        r.dealerHitsSoft17 = true;
+        r.blackjackPayout = 1.5;
+        r.doubleAfterSplit = true;
+        r.surrender = true;
+        return r;
+    }
+    static GameRules atlanticCity() {
+        GameRules r;
+        r.numDecks = 8;
+        r.dealerHitsSoft17 = false;
+        r.blackjackPayout = 1.5;
+        r.doubleAfterSplit = true;
+        r.surrender = true;
+        return r;
+    }
+    static GameRules european() {
+        GameRules r;
+        r.numDecks = 6;
+        r.dealerHitsSoft17 = false;
+        r.blackjackPayout = 1.5;
+        r.surrender = false;
+        return r;
+    }
+    static GameRules singleDeck() {
+        GameRules r;
+        r.numDecks = 1;
+        r.dealerHitsSoft17 = true;
+        r.blackjackPayout = 1.5;
+        return r;
+    }
 };
 
 } // namespace blackjack

@@ -204,8 +204,12 @@ private:
 
   /**
    * @brief Complete episode and learn from experiences
+   * @param outcomes One outcome per player hand (e.g. after split); reward is summed.
+   * @param wasDoubledByHand One bool per hand; doubled hands get 2x reward.
    */
-  void finishEpisode(std::vector<ai::Experience> &experiences, Outcome outcome);
+  void finishEpisode(std::vector<ai::Experience> &experiences,
+                    const std::vector<Outcome> &outcomes,
+                    const std::vector<bool> &wasDoubledByHand);
 };
 } // namespace training
 } // namespace blackjack

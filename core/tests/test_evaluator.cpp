@@ -60,9 +60,10 @@ TEST_F(EvaluatorTest, BasicStrategyStandOnHard20) {
   EXPECT_EQ(bs.getAction(State(20, 10, false)), Action::STAND);
 }
 
-TEST_F(EvaluatorTest, BasicStrategyHitOnHard16VsDealer10) {
+TEST_F(EvaluatorTest, BasicStrategySurrenderHard16VsDealer10) {
   const BasicStrategy &bs = evaluator.getBasicStrategy();
-  EXPECT_EQ(bs.getAction(State(16, 10, false)), Action::HIT);
+  // With surrender, optimal play is surrender on hard 16 vs 10
+  EXPECT_EQ(bs.getAction(State(16, 10, false)), Action::SURRENDER);
 }
 
 TEST_F(EvaluatorTest, BasicStrategyStandOnHard17) {

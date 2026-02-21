@@ -16,7 +16,7 @@ namespace ai {
 class PolicyTable {
 public:
   static constexpr size_t TABLE_SIZE = 4096;
-  static constexpr size_t NUM_ACTIONS = 4;
+  static constexpr size_t NUM_ACTIONS = 5;  // HIT, STAND, DOUBLE, SPLIT, SURRENDER
   using QValues = std::array<double, NUM_ACTIONS>;
 
   explicit PolicyTable(double defaultValue = 0.0) : defaultValue_(defaultValue) {
@@ -43,7 +43,7 @@ public:
     table_[idx][static_cast<size_t>(action)] = value;
   }
 
-  /** Order: HIT, STAND, DOUBLE, SPLIT. Unvisited state returns all default. */
+  /** Order: HIT, STAND, DOUBLE, SPLIT, SURRENDER. Unvisited state returns all default. */
   QValues getAll(const State &state) const {
     size_t idx = state.hash();
     if (!visited_[idx]) {
@@ -93,7 +93,7 @@ public:
   void loadFromBinary(const std::string &filepath);
 
   /** CSV columns:
-   * player_total,dealer_card,usable_ace,Q_HIT,Q_STAND,Q_DOUBLE,Q_SPLIT */
+   * player_total,dealer_card,usable_ace,Q_HIT,Q_STAND,Q_DOUBLE,Q_SPLIT,Q_SURRENDER */
   void exportToCSV(const std::string &filepath) const;
 
 private:

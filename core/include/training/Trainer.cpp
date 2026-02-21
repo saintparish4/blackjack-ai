@@ -1,5 +1,6 @@
 #include "Trainer.hpp"
 #include "../ai/GameStateConverter.hpp"
+#include <algorithm>
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
@@ -119,10 +120,15 @@ EpisodeStats Trainer::runEpisode() {
 
   // Check for immediate blackjack
   if (game_->isRoundComplete()) {
-    Outcome outcome = game_->getOutcome();
-    finishEpisode(experiences, outcome);
-    stats.outcome = outcome;
-    stats.reward = ai::GameStateConverter::outcomeToReward(outcome);
+    const std::vector<Outcome> &outcomes = game_->getOutcomes();
+    const std::vector<bool> &wasDoubled = game_->getWasDoubledByHand();
+    finishEpisode(experiences, outcomes, wasDoubled);
+    stats.outcome = outcomes.empty() ? Outcome::PUSH : outcomes[0];
+    stats.reward = 0.0;
+    for (size_t i = 0; i < outcomes.size(); ++i) {
+      stats.reward += ai::GameStateConverter::outcomeToReward(
+          outcomes[i], i < wasDoubled.size() && wasDoubled[i]);
+    }
     stats.handsPlayed = 0;
     return stats;
   }
@@ -130,69 +136,76 @@ EpisodeStats Trainer::runEpisode() {
   // Play agent's turn
   playAgentTurn(experiences);
 
-  // Get outcome
-  Outcome outcome = game_->getOutcome();
-  stats.outcome = outcome;
-  stats.reward = ai::GameStateConverter::outcomeToReward(outcome);
+  // Get outcomes (one per hand; multiple after split)
+  const std::vector<Outcome> &outcomes = game_->getOutcomes();
+  const std::vector<bool> &wasDoubled = game_->getWasDoubledByHand();
+  stats.outcome = outcomes.empty() ? Outcome::PUSH : outcomes[0];
+  stats.reward = 0.0;
+  for (size_t i = 0; i < outcomes.size(); ++i) {
+    stats.reward += ai::GameStateConverter::outcomeToReward(
+        outcomes[i], i < wasDoubled.size() && wasDoubled[i]);
+  }
   stats.handsPlayed = static_cast<int>(experiences.size());
-  stats.playerBusted = (outcome == Outcome::PLAYER_BUST);
-  stats.dealerBusted = (outcome == Outcome::DEALER_BUST);
+  stats.playerBusted = std::any_of(
+      outcomes.begin(), outcomes.end(),
+      [](Outcome o) { return o == Outcome::PLAYER_BUST; });
+  stats.dealerBusted = std::any_of(
+      outcomes.begin(), outcomes.end(),
+      [](Outcome o) { return o == Outcome::DEALER_BUST; });
 
   // Learn from all experiences
-  finishEpisode(experiences, outcome);
+  finishEpisode(experiences, outcomes, wasDoubled);
 
   return stats;
 }
 
 void Trainer::playAgentTurn(std::vector<ai::Experience> &experiences) {
   while (!game_->isRoundComplete()) {
-    // Get current state
     const Hand &playerHand = game_->getPlayerHand();
-    const Hand &dealerHand = game_->getDealerHand(true); // Hide hole card
+    const Hand &dealerHand = game_->getDealerHand(true);
 
-    ai::State currentState =
-        ai::GameStateConverter::toAIState(playerHand, dealerHand);
+    ai::State currentState = ai::GameStateConverter::toAIState(
+        playerHand, dealerHand, game_->canSplit(), game_->canDoubleDown());
 
-    // Get valid actions
     std::vector<ai::Action> validActions =
-        ai::GameStateConverter::getValidActions(playerHand);
+        ai::GameStateConverter::getValidActions(
+            playerHand, game_->canSplit(), game_->canDoubleDown(),
+            game_->canSurrender());
 
-    // Agent chooses action
     ai::Action action = agent_->chooseAction(currentState, validActions, true);
 
-    // Execute action in game
     ai::GameStateConverter::executeAction(action, *game_);
 
-    // Get next state (or terminal state if done)
     ai::State nextState;
     std::vector<ai::Action> nextValidActions;
     if (!game_->isRoundComplete()) {
-      nextState = ai::GameStateConverter::toAIState(game_->getPlayerHand(),
-                                                    game_->getDealerHand(true));
-      nextValidActions =
-          ai::GameStateConverter::getValidActions(game_->getPlayerHand());
+      nextState = ai::GameStateConverter::toAIState(
+          game_->getPlayerHand(), game_->getDealerHand(true),
+          game_->canSplit(), game_->canDoubleDown());
+      nextValidActions = ai::GameStateConverter::getValidActions(
+          game_->getPlayerHand(), game_->canSplit(), game_->canDoubleDown(),
+          game_->canSurrender());
     }
 
-    // Store experience (reward will be assigned at end)
-    experiences.emplace_back(currentState, action,
-                             0.0, // Placeholder, will be updated
-                             nextState, game_->isRoundComplete(),
+    experiences.emplace_back(currentState, action, 0.0, nextState,
+                             game_->isRoundComplete(),
                              std::move(nextValidActions));
   }
 }
 
 void Trainer::finishEpisode(std::vector<ai::Experience> &experiences,
-                            Outcome outcome) {
-  // Calculate final reward
-  double finalReward = ai::GameStateConverter::outcomeToReward(outcome);
+                            const std::vector<Outcome> &outcomes,
+                            const std::vector<bool> &wasDoubledByHand) {
+  double finalReward = 0.0;
+  for (size_t i = 0; i < outcomes.size(); ++i) {
+    finalReward += ai::GameStateConverter::outcomeToReward(
+        outcomes[i], i < wasDoubledByHand.size() && wasDoubledByHand[i]);
+  }
 
-  // Assign reward: only the terminal experience gets the final reward;
-  // intermediate steps get 0.0
   for (size_t i = 0; i < experiences.size(); ++i) {
     experiences[i].reward = (i + 1 == experiences.size()) ? finalReward : 0.0;
   }
 
-  // Learn from each experience
   for (const auto &exp : experiences) {
     agent_->learn(exp);
   }

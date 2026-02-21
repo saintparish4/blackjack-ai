@@ -108,9 +108,10 @@ private:
   BasicStrategy basicStrategy_;
 
   /**
-   * @brief Play one evaluation game
+   * @brief Play one evaluation game.
+   * @return One outcome per player hand (multiple after split).
    */
-  Outcome playGame(ai::Agent *agent, BlackjackGame &game);
+  std::vector<Outcome> playGame(ai::Agent *agent, BlackjackGame &game);
 };
 } // namespace training
 } // namespace blackjack

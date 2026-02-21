@@ -53,7 +53,7 @@ void BasicStrategy::initializeHardStrategy() {
     }
   }
 
-  // 13-16: Stand vs 2-6, hit vs 7-A
+  // 13-16: Stand vs 2-6, hit vs 7-A (surrender overrides below for 15/16)
   for (int player = 13; player <= 16; ++player) {
     for (int dealer = 2; dealer <= 11; ++dealer) {
       if (dealer >= 2 && dealer <= 6) {
@@ -63,6 +63,11 @@ void BasicStrategy::initializeHardStrategy() {
       }
     }
   }
+  // Surrender: hard 15 vs 10, hard 16 vs 9/10/A
+  hardStrategy_[{15, 10}] = ai::Action::SURRENDER;
+  hardStrategy_[{16, 9}] = ai::Action::SURRENDER;
+  hardStrategy_[{16, 10}] = ai::Action::SURRENDER;
+  hardStrategy_[{16, 11}] = ai::Action::SURRENDER;
 
   // 17+: Always stand
   for (int player = 17; player <= 21; ++player) {
@@ -148,31 +153,37 @@ EvaluationResult Evaluator::evaluate(ai::Agent *agent, size_t numGames,
   double totalReward = 0.0;
 
   for (size_t i = 0; i < numGames; ++i) {
-    Outcome outcome = playGame(agent, game);
+    std::vector<Outcome> outcomes = playGame(agent, game);
+    const std::vector<bool> &wasDoubled = game.getWasDoubledByHand();
 
-    // Update counts
-    switch (outcome) {
-    case Outcome::PLAYER_WIN:
-    case Outcome::DEALER_BUST:
-      result.wins++;
-      break;
-    case Outcome::PLAYER_BLACKJACK:
-      result.wins++;
-      result.blackjacks++;
-      break;
-    case Outcome::DEALER_WIN:
-      result.losses++;
-      break;
-    case Outcome::PLAYER_BUST:
-      result.losses++;
-      result.busts++;
-      break;
-    case Outcome::PUSH:
-      result.pushes++;
-      break;
+    for (size_t j = 0; j < outcomes.size(); ++j) {
+      Outcome outcome = outcomes[j];
+      bool doubled = j < wasDoubled.size() && wasDoubled[j];
+      switch (outcome) {
+      case Outcome::PLAYER_WIN:
+      case Outcome::DEALER_BUST:
+        result.wins++;
+        break;
+      case Outcome::PLAYER_BLACKJACK:
+        result.wins++;
+        result.blackjacks++;
+        break;
+      case Outcome::DEALER_WIN:
+        result.losses++;
+        break;
+      case Outcome::PLAYER_BUST:
+        result.losses++;
+        result.busts++;
+        break;
+      case Outcome::PUSH:
+        result.pushes++;
+        break;
+      case Outcome::SURRENDER:
+        result.losses++;
+        break;
+      }
+      totalReward += ai::GameStateConverter::outcomeToReward(outcome, doubled);
     }
-
-    totalReward += ai::GameStateConverter::outcomeToReward(outcome);
   }
 
   // Calculate rates
@@ -190,30 +201,30 @@ EvaluationResult Evaluator::evaluate(ai::Agent *agent, size_t numGames,
   return result;
 }
 
-Outcome Evaluator::playGame(ai::Agent *agent, BlackjackGame &game) {
+std::vector<Outcome> Evaluator::playGame(ai::Agent *agent, BlackjackGame &game) {
   game.startRound();
 
-  // Check for immediate blackjack
   if (game.isRoundComplete()) {
-    return game.getOutcome();
+    return game.getOutcomes();
   }
 
-  // Play agent's turn (no training, pure exploitation)
   while (!game.isRoundComplete()) {
     const Hand &playerHand = game.getPlayerHand();
     const Hand &dealerHand = game.getDealerHand(true);
 
-    ai::State state = ai::GameStateConverter::toAIState(playerHand, dealerHand);
+    ai::State state = ai::GameStateConverter::toAIState(
+        playerHand, dealerHand, game.canSplit(), game.canDoubleDown());
     std::vector<ai::Action> validActions =
-        ai::GameStateConverter::getValidActions(playerHand);
+        ai::GameStateConverter::getValidActions(
+            playerHand, game.canSplit(), game.canDoubleDown(),
+            game.canSurrender());
 
     ai::Action action = agent->chooseAction(state, validActions, false);
 
-    // Execute action
     ai::GameStateConverter::executeAction(action, game);
   }
 
-  return game.getOutcome();
+  return game.getOutcomes();
 }
 
 double Evaluator::compareWithBasicStrategy(ai::Agent *agent) {
@@ -230,6 +241,14 @@ double Evaluator::compareWithBasicStrategy(ai::Agent *agent) {
                                                 ai::Action::STAND};
         if (playerTotal >= 9 && playerTotal <= 11) {
           validActions.push_back(ai::Action::DOUBLE);
+        }
+        // Surrender-relevant states (two-card hand): hard 15 vs 10, hard 16 vs 9/10/A
+        int dealerForLookup = (dealerCard == 1) ? 11 : dealerCard;
+        if (!hasUsableAce &&
+            ((playerTotal == 15 && dealerForLookup == 10) ||
+             (playerTotal == 16 && (dealerForLookup == 9 || dealerForLookup == 10 ||
+                                    dealerForLookup == 11)))) {
+          validActions.push_back(ai::Action::SURRENDER);
         }
 
         ai::Action agentAction = agent->chooseAction(state, validActions, false);

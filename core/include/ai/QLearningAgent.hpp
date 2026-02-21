@@ -41,7 +41,7 @@ public:
   double getExplorationRate() const override { return epsilon_; }
   size_t getStateCount() const override { return qTable_.size(); }
 
-  std::array<double, 4> getAllQValues(const State &state) const {
+  PolicyTable::QValues getAllQValues(const State &state) const {
     return qTable_.getAll(state);
   }
   double getEpsilon() const { return epsilon_; }

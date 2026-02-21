@@ -11,7 +11,11 @@ namespace ai {
 /** Maps game (Hands) to AI State and valid actions; outcome → reward scale. */
 class GameStateConverter {
 public:
-  static State toAIState(const Hand &playerHand, const Hand &dealerHand) {
+  /** allowSplit/allowDouble: use game.canSplit() and game.canDoubleDown() when
+   *  calling from Trainer/Evaluator so split hands get canSplit=false,
+   *  canDouble=false (no double-after-split). */
+  static State toAIState(const Hand &playerHand, const Hand &dealerHand,
+                          bool allowSplit = true, bool allowDouble = true) {
     auto playerValue = playerHand.getValue();
 
     const auto &dealerCards = dealerHand.getCards();
@@ -24,25 +28,33 @@ public:
       dealerUpCard = 1; // state uses 1 for ace
     }
 
-    return State(playerValue.total, dealerUpCard, playerValue.isSoft,
-                 playerHand.canSplit(), playerHand.size() == 2);
+    bool canSplit = allowSplit && playerHand.canSplit();
+    bool canDouble = allowDouble && (playerHand.size() == 2);
+    return State(playerValue.total, dealerUpCard, playerValue.isSoft, canSplit,
+                 canDouble);
   }
 
-  static std::vector<Action> getValidActions(const Hand &playerHand) {
+  static std::vector<Action> getValidActions(const Hand &playerHand,
+                                             bool allowSplit = true,
+                                             bool allowDouble = true,
+                                             bool allowSurrender = false) {
     std::vector<Action> actions;
-    actions.reserve(4);
+    actions.reserve(5);
     actions.push_back(Action::HIT);
     actions.push_back(Action::STAND);
-    if (playerHand.size() == 2) {
+    if (allowDouble && playerHand.size() == 2) {
       actions.push_back(Action::DOUBLE);
     }
-    if (playerHand.canSplit()) {
+    if (allowSplit && playerHand.canSplit()) {
       actions.push_back(Action::SPLIT);
+    }
+    if (allowSurrender && playerHand.size() == 2) {
+      actions.push_back(Action::SURRENDER);
     }
     return actions;
   }
 
-  /** Executes action in game; falls back to HIT for unimplemented SPLIT. */
+  /** Executes action in game. */
   static bool executeAction(Action action, BlackjackGame &game) {
     switch (action) {
     case Action::HIT:
@@ -56,28 +68,38 @@ public:
       }
       return true;
     case Action::SPLIT:
-      // TODO: Implement split; fall back to hit
-      return game.hit();
+      return game.split();
+    case Action::SURRENDER:
+      return game.surrender();
     }
     return false;
   }
 
-  /** Rewards: blackjack +1.5, win +1, push 0, loss/bust -1. */
-  static double outcomeToReward(Outcome outcome) {
+  /** Rewards: blackjack +1.5, win +1, push 0, loss/bust -1. If wasDoubled, multiply by 2. */
+  static double outcomeToReward(Outcome outcome, bool wasDoubled = false) {
+    double r;
     switch (outcome) {
     case Outcome::PLAYER_BLACKJACK:
-      return 1.5;
+      r = 1.5;
+      break;
     case Outcome::PLAYER_WIN:
     case Outcome::DEALER_BUST:
-      return 1.0;
+      r = 1.0;
+      break;
     case Outcome::PUSH:
-      return 0.0;
+      r = 0.0;
+      break;
     case Outcome::DEALER_WIN:
     case Outcome::PLAYER_BUST:
-      return -1.0;
+      r = -1.0;
+      break;
+    case Outcome::SURRENDER:
+      r = -0.5;
+      break;
     default:
-      return 0.0;
+      r = 0.0;
     }
+    return wasDoubled ? (r * 2.0) : r;
   }
 };
 } // namespace ai

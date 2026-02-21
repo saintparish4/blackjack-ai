@@ -345,4 +345,15 @@ TEST_F(QLearningTest, RewardConversionIsCorrect) {
   EXPECT_DOUBLE_EQ(GameStateConverter::outcomeToReward(Outcome::PUSH), 0.0);
   EXPECT_DOUBLE_EQ(GameStateConverter::outcomeToReward(Outcome::PLAYER_BUST),
                    -1.0);
+  EXPECT_DOUBLE_EQ(GameStateConverter::outcomeToReward(Outcome::SURRENDER),
+                   -0.5);
+}
+
+TEST_F(QLearningTest, DoubleDownRewardMultiplier) {
+  EXPECT_DOUBLE_EQ(
+      GameStateConverter::outcomeToReward(Outcome::PLAYER_WIN, true), 2.0);
+  EXPECT_DOUBLE_EQ(
+      GameStateConverter::outcomeToReward(Outcome::DEALER_WIN, true), -2.0);
+  EXPECT_DOUBLE_EQ(
+      GameStateConverter::outcomeToReward(Outcome::PUSH, true), 0.0);
 }

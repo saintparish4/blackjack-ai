@@ -92,7 +92,7 @@ void PolicyTable::exportToCSV(const std::string &filepath) const {
     throw std::runtime_error("Cannot open file for writing: " + filepath);
   }
 
-  file << "player_total,dealer_card,usable_ace,Q_HIT,Q_STAND,Q_DOUBLE,Q_SPLIT\n";
+  file << "player_total,dealer_card,usable_ace,Q_HIT,Q_STAND,Q_DOUBLE,Q_SPLIT,Q_SURRENDER\n";
   file << std::fixed << std::setprecision(6);
 
   for (size_t i = 0; i < TABLE_SIZE; ++i) {

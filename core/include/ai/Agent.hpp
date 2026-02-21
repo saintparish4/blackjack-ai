@@ -8,7 +8,7 @@
 namespace blackjack {
 namespace ai {
 
-enum class Action : uint8_t { HIT = 0, STAND = 1, DOUBLE = 2, SPLIT = 3 };
+enum class Action : uint8_t { HIT = 0, STAND = 1, DOUBLE = 2, SPLIT = 3, SURRENDER = 4 };
 
 inline std::string actionToString(Action action) {
   switch (action) {
@@ -20,6 +20,8 @@ inline std::string actionToString(Action action) {
     return "DOUBLE";
   case Action::SPLIT:
     return "SPLIT";
+  case Action::SURRENDER:
+    return "SURRENDER";
   default:
     return "UNKNOWN";
   }

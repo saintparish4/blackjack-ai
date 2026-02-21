@@ -18,6 +18,8 @@ std::string outcomeToString(Outcome outcome) {
     return "Player Bust";
   case Outcome::DEALER_BUST:
     return "Dealer Bust";
+  case Outcome::SURRENDER:
+    return "Surrender";
   default:
     return "Unknown";
   }
@@ -26,31 +28,33 @@ std::string outcomeToString(Outcome outcome) {
 BlackjackGame::BlackjackGame(const GameRules &rules,
                              std::optional<uint32_t> seed)
     : rules_(rules), deck_(std::make_unique<Deck>(rules.numDecks, seed)),
-      roundComplete_(false), handCount_(0) {}
+      playerHands_(1), currentHandIndex_(0), splitUsed_(false),
+      roundComplete_(false) {}
 
 void BlackjackGame::startRound() {
-  // Check if we need to reshuffle
   checkAndReshuffle();
 
-  // Clear previous hands
-  playerHand_.clear();
+  playerHands_.clear();
+  playerHands_.emplace_back();
+  Hand &single = playerHands_.back();
+  single.addCard(deck_->deal());
+  single.addCard(deck_->deal());
+
   dealerHand_.clear();
+  dealerHand_.addCard(deck_->deal());
+  dealerHand_.addCard(deck_->deal());
+
+  currentHandIndex_ = 0;
+  splitUsed_ = false;
   roundComplete_ = false;
   outcome_.reset();
-  handCount_ = 0;
+  outcomes_.clear();
+  doubledByHand_.assign(1, false);
 
-  // Deal initial cards (player, dealer, player, dealer)
-  playerHand_.addCard(deck_->deal());
-  dealerHand_.addCard(deck_->deal());
-  playerHand_.addCard(deck_->deal());
-  dealerHand_.addCard(deck_->deal());
-
-  handCount_ = 2;
-
-  // Check for immediate blackjack
-  if (playerHand_.isBlackjack() || dealerHand_.isBlackjack()) {
+  if (playerHands_[0].isBlackjack() || dealerHand_.isBlackjack()) {
     roundComplete_ = true;
-    outcome_ = determineOutcome();
+    outcome_ = determineOutcome(playerHands_[0]);
+    outcomes_.push_back(*outcome_);
   }
 }
 
@@ -59,13 +63,15 @@ bool BlackjackGame::hit() {
     return false;
   }
 
-  playerHand_.addCard(deck_->deal());
-  handCount_++;
+  Hand &cur = playerHands_[currentHandIndex_];
+  cur.addCard(deck_->deal());
 
-  // Check if player busts
-  if (playerHand_.isBust()) {
-    roundComplete_ = true;
-    outcome_ = Outcome::PLAYER_BUST;
+  if (cur.isBust()) {
+    if (currentHandIndex_ + 1 < playerHands_.size()) {
+      currentHandIndex_++;
+    } else {
+      finishRoundAndResolveOutcomes();
+    }
     return true;
   }
 
@@ -77,11 +83,11 @@ void BlackjackGame::stand() {
     return;
   }
 
-  // Player is done, dealer plays
-  playDealerHand();
-
-  roundComplete_ = true;
-  outcome_ = determineOutcome();
+  if (currentHandIndex_ + 1 < playerHands_.size()) {
+    currentHandIndex_++;
+  } else {
+    finishRoundAndResolveOutcomes();
+  }
 }
 
 bool BlackjackGame::doubleDown() {
@@ -89,18 +95,54 @@ bool BlackjackGame::doubleDown() {
     return false;
   }
 
-  // Take one card and end turn
-  playerHand_.addCard(deck_->deal());
-  handCount_++;
+  doubledByHand_[currentHandIndex_] = true;
+  Hand &cur = playerHands_[currentHandIndex_];
+  cur.addCard(deck_->deal());
 
-  if (playerHand_.isBust()) {
-    roundComplete_ = true;
-    outcome_ = Outcome::PLAYER_BUST;
+  if (cur.isBust()) {
+    if (currentHandIndex_ + 1 < playerHands_.size()) {
+      currentHandIndex_++;
+    } else {
+      finishRoundAndResolveOutcomes();
+    }
   } else {
-    playDealerHand();
-    roundComplete_ = true;
-    outcome_ = determineOutcome();
+    if (currentHandIndex_ + 1 < playerHands_.size()) {
+      currentHandIndex_++;
+    } else {
+      finishRoundAndResolveOutcomes();
+    }
   }
+
+  return true;
+}
+
+bool BlackjackGame::surrender() {
+  if (!canSurrender()) {
+    return false;
+  }
+  outcome_ = Outcome::SURRENDER;
+  outcomes_.assign(1, Outcome::SURRENDER);
+  roundComplete_ = true;
+  return true;
+}
+
+bool BlackjackGame::split() {
+  if (!canSplit()) {
+    return false;
+  }
+
+  Hand &first = playerHands_[0];
+  Card secondCard = first.split();
+
+  Hand secondHand;
+  secondHand.addCard(secondCard);
+  secondHand.addCard(deck_->deal());
+  first.addCard(deck_->deal());
+
+  playerHands_.push_back(std::move(secondHand));
+  doubledByHand_.push_back(false);
+  splitUsed_ = true;
+  currentHandIndex_ = 0;
 
   return true;
 }
@@ -109,8 +151,11 @@ Outcome BlackjackGame::getOutcome() const {
   if (!roundComplete_) {
     throw std::logic_error("Round is not complete");
   }
-
   return outcome_.value();
+}
+
+const Hand &BlackjackGame::getPlayerHand() const {
+  return playerHands_[currentHandIndex_];
 }
 
 Hand BlackjackGame::getDealerHand(bool hideHoleCard) const {
@@ -119,33 +164,63 @@ Hand BlackjackGame::getDealerHand(bool hideHoleCard) const {
     visibleHand.addCard(dealerHand_.getCards()[0]);
     return visibleHand;
   }
-
   return dealerHand_;
 }
 
 bool BlackjackGame::canDoubleDown() const {
-  // Can only double on first two cards
-  return !roundComplete_ && handCount_ == 2;
+  if (roundComplete_) {
+    return false;
+  }
+  const Hand &cur = playerHands_[currentHandIndex_];
+  if (cur.size() != 2) {
+    return false;
+  }
+  // No double after split in this implementation
+  if (splitUsed_ && playerHands_.size() > 1) {
+    return false;
+  }
+  return true;
+}
+
+bool BlackjackGame::canSplit() const {
+  if (roundComplete_ || splitUsed_) {
+    return false;
+  }
+  if (playerHands_.size() != 1) {
+    return false;
+  }
+  return playerHands_[0].canSplit();
+}
+
+bool BlackjackGame::canSurrender() const {
+  if (roundComplete_ || !rules_.surrender) {
+    return false;
+  }
+  if (playerHands_.size() != 1) {
+    return false;
+  }
+  return playerHands_[0].size() == 2;
 }
 
 void BlackjackGame::reset() {
   deck_->reset();
-  playerHand_.clear();
+  playerHands_.clear();
+  playerHands_.emplace_back();
+  doubledByHand_.assign(1, false);
   dealerHand_.clear();
+  currentHandIndex_ = 0;
+  splitUsed_ = false;
   roundComplete_ = false;
   outcome_.reset();
-  handCount_ = 0;
+  outcomes_.clear();
 }
 
 void BlackjackGame::playDealerHand() {
-  // Dealer must hit until 17 or higher
   while (true) {
     int total = dealerHand_.getTotal();
     bool soft = dealerHand_.isSoft();
 
-    // Check if dealer should hit
     bool shouldHit = false;
-
     if (total < 17) {
       shouldHit = true;
     } else if (total == 17 && soft && rules_.dealerHitsSoft17) {
@@ -157,51 +232,53 @@ void BlackjackGame::playDealerHand() {
     }
 
     dealerHand_.addCard(deck_->deal());
-
-    // Check for bust
     if (dealerHand_.isBust()) {
       break;
     }
   }
 }
 
-Outcome BlackjackGame::determineOutcome() const {
-  bool playerBlackjack = playerHand_.isBlackjack();
+Outcome BlackjackGame::determineOutcome(const Hand &playerHand) const {
+  bool playerBlackjack = playerHand.isBlackjack();
   bool dealerBlackjack = dealerHand_.isBlackjack();
 
-  // Check for blackjacks first
   if (playerBlackjack && dealerBlackjack) {
     return Outcome::PUSH;
   }
-
   if (playerBlackjack) {
     return Outcome::PLAYER_BLACKJACK;
   }
-
   if (dealerBlackjack) {
     return Outcome::DEALER_WIN;
   }
 
-  // Check for busts
-  int playerTotal = playerHand_.getTotal();
+  int playerTotal = playerHand.getTotal();
   int dealerTotal = dealerHand_.getTotal();
 
   if (playerTotal > 21) {
     return Outcome::PLAYER_BUST;
   }
-
   if (dealerTotal > 21) {
     return Outcome::DEALER_BUST;
   }
 
-  // Compare totals
   if (playerTotal > dealerTotal) {
     return Outcome::PLAYER_WIN;
-  } else if (dealerTotal > playerTotal) {
-    return Outcome::DEALER_WIN;
-  } else {
-    return Outcome::PUSH;
   }
+  if (dealerTotal > playerTotal) {
+    return Outcome::DEALER_WIN;
+  }
+  return Outcome::PUSH;
+}
+
+void BlackjackGame::finishRoundAndResolveOutcomes() {
+  playDealerHand();
+  outcomes_.clear();
+  for (const Hand &h : playerHands_) {
+    outcomes_.push_back(determineOutcome(h));
+  }
+  outcome_ = outcomes_[0];
+  roundComplete_ = true;
 }
 
 void BlackjackGame::checkAndReshuffle() {

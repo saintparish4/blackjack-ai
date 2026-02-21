@@ -479,3 +479,217 @@ TEST_F(BlackjackGameTest, DoubleDownFailsWhenNotAllowed) {
   }
   EXPECT_TRUE(testedDoubleDownFail);
 }
+
+// === Split Tests ===
+
+TEST_F(BlackjackGameTest, CanSplitWhenPair) {
+  bool foundPair = false;
+  for (int i = 0; i < 300 && !foundPair; i++) {
+    game.startRound();
+    if (!game.isRoundComplete() && game.getPlayerHand().canSplit()) {
+      foundPair = true;
+      EXPECT_TRUE(game.canSplit());
+    }
+    game.reset();
+  }
+  EXPECT_TRUE(foundPair);
+}
+
+TEST_F(BlackjackGameTest, CannotSplitAfterHit) {
+  bool tested = false;
+  for (int i = 0; i < 300 && !tested; i++) {
+    game.startRound();
+    if (!game.isRoundComplete() && game.getPlayerHand().canSplit()) {
+      game.hit();
+      if (!game.isRoundComplete()) {
+        tested = true;
+        EXPECT_FALSE(game.canSplit());
+      }
+    }
+    game.reset();
+  }
+  EXPECT_TRUE(tested);
+}
+
+TEST_F(BlackjackGameTest, SplitCreatesTwoHandsPlayedSequentially) {
+  bool tested = false;
+  for (int i = 0; i < 500 && !tested; i++) {
+    game.startRound();
+    if (!game.isRoundComplete() && game.getPlayerHand().canSplit()) {
+      bool ok = game.split();
+      ASSERT_TRUE(ok);
+      EXPECT_FALSE(game.isRoundComplete());
+      // First hand: stand
+      game.stand();
+      if (!game.isRoundComplete()) {
+        // Second hand in progress
+        game.stand();
+      }
+      EXPECT_TRUE(game.isRoundComplete());
+      const std::vector<Outcome>& outcomes = game.getOutcomes();
+      EXPECT_EQ(outcomes.size(), 2u);
+      tested = true;
+    }
+    game.reset();
+  }
+  EXPECT_TRUE(tested);
+}
+
+TEST_F(BlackjackGameTest, CannotSplitTwice) {
+  bool tested = false;
+  for (int i = 0; i < 500 && !tested; i++) {
+    game.startRound();
+    if (!game.isRoundComplete() && game.getPlayerHand().canSplit()) {
+      EXPECT_TRUE(game.split());
+      EXPECT_FALSE(game.canSplit());
+      tested = true;
+    }
+    game.reset();
+  }
+  EXPECT_TRUE(tested);
+}
+
+TEST_F(BlackjackGameTest, SplitOutcomesForEachHand) {
+  bool tested = false;
+  for (int i = 0; i < 500 && !tested; i++) {
+    game.startRound();
+    if (!game.isRoundComplete() && game.getPlayerHand().canSplit()) {
+      game.split();
+      game.stand();
+      game.stand();
+      EXPECT_TRUE(game.isRoundComplete());
+      const std::vector<Outcome>& outcomes = game.getOutcomes();
+      ASSERT_EQ(outcomes.size(), 2u);
+      for (Outcome o : outcomes) {
+        EXPECT_TRUE(o == Outcome::PLAYER_WIN || o == Outcome::DEALER_WIN ||
+                    o == Outcome::PUSH || o == Outcome::PLAYER_BUST ||
+                    o == Outcome::DEALER_BUST || o == Outcome::PLAYER_BLACKJACK);
+      }
+      EXPECT_EQ(game.getOutcome(), outcomes[0]);
+      tested = true;
+    }
+    game.reset();
+  }
+  EXPECT_TRUE(tested);
+}
+
+TEST_F(BlackjackGameTest, SplitFirstHandBustThenSecondHandPlayed) {
+  // After split: hit until current hand busts (may be first or second hand).
+  // When a hand busts we advance to the next; when the last hand is done we get 2 outcomes.
+  bool tested = false;
+  for (int i = 0; i < 500 && !tested; i++) {
+    game.startRound();
+    if (!game.isRoundComplete() && game.getPlayerHand().canSplit()) {
+      game.split();
+      int hits = 0;
+      while (!game.isRoundComplete() && hits < 20) {
+        if (game.getPlayerHand().isBust()) {
+          break; // Current hand busted; we advanced to next or round will complete
+        }
+        game.hit();
+        hits++;
+      }
+      if (!game.isRoundComplete()) {
+        game.stand();
+      }
+      if (game.isRoundComplete()) {
+        const std::vector<Outcome>& outcomes = game.getOutcomes();
+        EXPECT_EQ(outcomes.size(), 2u);
+        tested = true;
+      }
+    }
+    game.reset();
+  }
+  EXPECT_TRUE(tested);
+}
+
+// === Surrender Tests (Feature 2) ===
+
+TEST_F(BlackjackGameTest, SurrenderNotAllowedWhenDisabled) {
+  GameRules rules;
+  rules.surrender = false;
+  BlackjackGame gameNoSurrender(rules);
+  gameNoSurrender.startRound();
+  if (!gameNoSurrender.isRoundComplete()) {
+    EXPECT_FALSE(gameNoSurrender.canSurrender());
+    EXPECT_FALSE(gameNoSurrender.surrender());
+  }
+}
+
+TEST_F(BlackjackGameTest, CanSurrenderOnFirstTwoCardsWhenEnabled) {
+  GameRules rules;
+  rules.surrender = true;
+  BlackjackGame game(rules);
+  bool found = false;
+  for (int i = 0; i < 100 && !found; i++) {
+    game.startRound();
+    if (!game.isRoundComplete() && game.getPlayerHand().size() == 2) {
+      found = true;
+      EXPECT_TRUE(game.canSurrender());
+    }
+    game.reset();
+  }
+  EXPECT_TRUE(found);
+}
+
+TEST_F(BlackjackGameTest, SurrenderEndsRoundWithSurrenderOutcome) {
+  GameRules rules;
+  rules.surrender = true;
+  BlackjackGame game(rules);
+  bool tested = false;
+  for (int i = 0; i < 100 && !tested; i++) {
+    game.startRound();
+    if (!game.isRoundComplete() && game.canSurrender()) {
+      EXPECT_TRUE(game.surrender());
+      EXPECT_TRUE(game.isRoundComplete());
+      EXPECT_EQ(game.getOutcome(), Outcome::SURRENDER);
+      EXPECT_EQ(game.getOutcomes().size(), 1u);
+      EXPECT_EQ(game.getOutcomes()[0], Outcome::SURRENDER);
+      tested = true;
+    }
+    game.reset();
+  }
+  EXPECT_TRUE(tested);
+}
+
+TEST_F(BlackjackGameTest, CannotSurrenderAfterHit) {
+  GameRules rules;
+  rules.surrender = true;
+  BlackjackGame game(rules);
+  bool tested = false;
+  for (int i = 0; i < 100 && !tested; i++) {
+    game.startRound();
+    if (!game.isRoundComplete()) {
+      game.hit();
+      if (!game.isRoundComplete()) {
+        tested = true;
+        EXPECT_FALSE(game.canSurrender());
+        EXPECT_FALSE(game.surrender());
+      }
+    }
+    game.reset();
+  }
+  EXPECT_TRUE(tested);
+}
+
+// === Rule Presets (Feature 4) ===
+
+TEST_F(BlackjackGameTest, VegasStripPreset) {
+  GameRules r = GameRules::vegasStrip();
+  EXPECT_EQ(r.numDecks, 6u);
+  EXPECT_FALSE(r.dealerHitsSoft17);
+  EXPECT_FALSE(r.surrender);
+}
+
+TEST_F(BlackjackGameTest, DowntownPresetHasSurrender) {
+  GameRules r = GameRules::downtown();
+  EXPECT_EQ(r.numDecks, 2u);
+  EXPECT_TRUE(r.dealerHitsSoft17);
+  EXPECT_TRUE(r.surrender);
+}
+
+TEST_F(BlackjackGameTest, SingleDeckPreset) {
+  GameRules r = GameRules::singleDeck();
+  EXPECT_EQ(r.numDecks, 1u);
+  EXPECT_TRUE(r.dealerHitsSoft17);
+}
