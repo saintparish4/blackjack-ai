@@ -54,6 +54,7 @@ target_link_libraries(blackjack_ai PUBLIC blackjack_game)
 
 # === Training (depends on AI) ===
 set(TRAINING_SOURCES
+    include/training/ConvergenceReport.cpp
     include/training/Evaluator.cpp
     include/training/Logger.cpp
     include/training/Trainer.cpp
@@ -103,11 +104,12 @@ target_link_libraries(train blackjack_training)
 add_executable(benchmark scripts/benchmark.cpp)
 target_link_libraries(benchmark blackjack_training)
 
-# Create necessary directories 
+# Create necessary directories
 file(MAKE_DIRECTORY ${PROJECT_SOURCE_DIR}/checkpoints)
 file(MAKE_DIRECTORY ${PROJECT_SOURCE_DIR}/logs)
 file(MAKE_DIRECTORY ${PROJECT_SOURCE_DIR}/models)
-file(MAKE_DIRECTORY ${PROJECT_SOURCE_DIR}/analysis) 
+file(MAKE_DIRECTORY ${PROJECT_SOURCE_DIR}/analysis)
+file(MAKE_DIRECTORY ${PROJECT_SOURCE_DIR}/../config)
 
 # === Build Summary ===
 message(STATUS "=================================")

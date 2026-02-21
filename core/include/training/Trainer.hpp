@@ -210,6 +210,13 @@ private:
   void finishEpisode(std::vector<ai::Experience> &experiences,
                     const std::vector<Outcome> &outcomes,
                     const std::vector<bool> &wasDoubledByHand);
+
+  /**
+   * @brief Run exhaustive convergence check against basic strategy and print results.
+   *
+   * Called automatically at the end of train() when verbose is enabled.
+   */
+  void runConvergenceReport();
 };
 } // namespace training
 } // namespace blackjack

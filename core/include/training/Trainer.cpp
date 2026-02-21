@@ -1,5 +1,6 @@
 #include "Trainer.hpp"
 #include "../ai/GameStateConverter.hpp"
+#include "ConvergenceReport.hpp"
 #include <algorithm>
 #include <filesystem>
 #include <iomanip>
@@ -31,7 +32,13 @@ Trainer::Trainer(std::shared_ptr<ai::Agent> agent, const TrainingConfig &config)
   }
 }
 
-TrainingMetrics Trainer::train() { return trainEpisodes(config_.numEpisodes); }
+TrainingMetrics Trainer::train() {
+  TrainingMetrics metrics = trainEpisodes(config_.numEpisodes);
+  if (config_.verbose) {
+    runConvergenceReport();
+  }
+  return metrics;
+}
 
 TrainingMetrics Trainer::trainEpisodes(size_t numEpisodes) {
   if (config_.verbose) {
@@ -304,6 +311,12 @@ void Trainer::saveCheckpoint(size_t episodeNum) {
 
 bool Trainer::shouldStopEarly() const {
   return episodesSinceImprovement_ >= config_.earlyStoppingPatience;
+}
+
+void Trainer::runConvergenceReport() {
+  ConvergenceReport report;
+  ConvergenceResult result = report.analyze(*agent_, evaluator_->getBasicStrategy());
+  report.print(result, std::cout);
 }
 } // namespace training
 } // namespace blackjack
