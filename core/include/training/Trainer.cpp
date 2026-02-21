@@ -1,6 +1,5 @@
 #include "Trainer.hpp"
 #include "../ai/GameStateConverter.hpp"
-#include "../ai/QLearningAgent.hpp"
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
@@ -14,7 +13,7 @@ Trainer::Trainer(std::shared_ptr<ai::Agent> agent, const TrainingConfig &config)
       game_(std::make_unique<BlackjackGame>(config.gameRules)),
       evaluator_(std::make_unique<Evaluator>(config.gameRules)),
       logger_(std::make_unique<Logger>(config.logDir)), paused_(false),
-      episodesSinceImprovement_(0), bestWinRate_(0.0) {
+      shouldStop_(false), episodesSinceImprovement_(0), bestWinRate_(0.0) {
   // Create checkpoint directory if it doesn't exist
   std::filesystem::create_directories(config_.checkpointDir);
   std::filesystem::create_directories(config_.logDir);
@@ -43,6 +42,16 @@ TrainingMetrics Trainer::trainEpisodes(size_t numEpisodes) {
 
   // Training loop
   for (size_t episode = startEpisode; episode < endEpisode; ++episode) {
+    // Check for stop request (signal handler)
+    if (shouldStop_) {
+      if (config_.verbose) {
+        std::cout << "\nStop requested at episode " << (episode + 1)
+                  << ". Saving checkpoint...\n";
+      }
+      saveCheckpoint(episode);
+      break;
+    }
+
     // Check for pause
     while (paused_) {
       std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -152,44 +161,23 @@ void Trainer::playAgentTurn(std::vector<ai::Experience> &experiences) {
     ai::Action action = agent_->chooseAction(currentState, validActions, true);
 
     // Execute action in game
-    bool actionSuccessful = false;
-
-    switch (action) {
-    case ai::Action::HIT:
-      actionSuccessful = game_->hit();
-      break;
-
-    case ai::Action::STAND:
-      game_->stand();
-      actionSuccessful = true;
-      break;
-
-    case ai::Action::DOUBLE:
-      actionSuccessful = game_->doubleDown();
-      if (!actionSuccessful) {
-        // Fallback to hit
-        actionSuccessful = game_->hit();
-      }
-      break;
-
-    case ai::Action::SPLIT:
-      // TODO: Implement split handling
-      // For now, fallback to hit
-      actionSuccessful = game_->hit();
-      break;
-    }
+    ai::GameStateConverter::executeAction(action, *game_);
 
     // Get next state (or terminal state if done)
-    ai::State nextState = ai::State(0, 0, false, false, false);
+    ai::State nextState;
+    std::vector<ai::Action> nextValidActions;
     if (!game_->isRoundComplete()) {
       nextState = ai::GameStateConverter::toAIState(game_->getPlayerHand(),
                                                     game_->getDealerHand(true));
+      nextValidActions =
+          ai::GameStateConverter::getValidActions(game_->getPlayerHand());
     }
 
     // Store experience (reward will be assigned at end)
     experiences.emplace_back(currentState, action,
                              0.0, // Placeholder, will be updated
-                             nextState, game_->isRoundComplete());
+                             nextState, game_->isRoundComplete(),
+                             std::move(nextValidActions));
   }
 }
 
@@ -198,11 +186,10 @@ void Trainer::finishEpisode(std::vector<ai::Experience> &experiences,
   // Calculate final reward
   double finalReward = ai::GameStateConverter::outcomeToReward(outcome);
 
-  // Assign reward to all experiences
-  // Simple approach: all actions get same reward
-  // Advanced: could use reward shaping
-  for (auto &exp : experiences) {
-    exp.reward = finalReward;
+  // Assign reward: only the terminal experience gets the final reward;
+  // intermediate steps get 0.0
+  for (size_t i = 0; i < experiences.size(); ++i) {
+    experiences[i].reward = (i + 1 == experiences.size()) ? finalReward : 0.0;
   }
 
   // Learn from each experience
@@ -255,11 +242,9 @@ void Trainer::evaluate() {
   currentMetrics_.avgReward = result.avgReward;
   currentMetrics_.bustRate = result.bustRate;
 
-  // Get epsilon from Q-learning agent (if applicable)
-  if (auto *qAgent = dynamic_cast<ai::QLearningAgent *>(agent_.get())) {
-    currentMetrics_.currentEpsilon = qAgent->getEpsilon();
-    currentMetrics_.statesLearned = qAgent->getStateSpaceSize();
-  }
+  // Get exploration metrics via agent interface
+  currentMetrics_.currentEpsilon = agent_->getExplorationRate();
+  currentMetrics_.statesLearned = agent_->getStateCount();
 
   // Log metrics
   logger_->log(currentMetrics_);

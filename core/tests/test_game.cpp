@@ -226,54 +226,56 @@ TEST_F(BlackjackGameTest, DoubleDownCompletesRoundEvenOnBust) {
 // === Blackjack Detection Tests ===
 
 TEST_F(BlackjackGameTest, PlayerBlackjackCompletesRoundImmediately) {
-  // This test is probabilistic - we need to keep starting rounds until we get blackjack
-  // or we could use a seeded deck if available
   bool foundBlackjack = false;
-  
-  for (int i = 0; i < 100 && !foundBlackjack; i++) {
+
+  for (int i = 0; i < 200 && !foundBlackjack; i++) {
     game.startRound();
-    
+
     if (game.getPlayerHand().isBlackjack()) {
       foundBlackjack = true;
       EXPECT_TRUE(game.isRoundComplete());
       EXPECT_EQ(game.getOutcome(), Outcome::PLAYER_BLACKJACK);
     }
+    game.reset();
   }
-  
-  // At least verify the logic works when blackjack occurs
-  if (foundBlackjack) {
-    EXPECT_TRUE(game.isRoundComplete());
-  }
+
+  EXPECT_TRUE(foundBlackjack);
 }
 
 TEST_F(BlackjackGameTest, DealerBlackjackCompletesRoundImmediately) {
   bool foundDealerBlackjack = false;
-  
-  for (int i = 0; i < 100 && !foundDealerBlackjack; i++) {
+
+  for (int i = 0; i < 200 && !foundDealerBlackjack; i++) {
     game.startRound();
-    
+
     if (game.getDealerHand(false).isBlackjack()) {
       foundDealerBlackjack = true;
       EXPECT_TRUE(game.isRoundComplete());
       Outcome outcome = game.getOutcome();
       EXPECT_TRUE(outcome == Outcome::DEALER_WIN || outcome == Outcome::PUSH);
     }
+    game.reset();
   }
+
+  EXPECT_TRUE(foundDealerBlackjack);
 }
 
 TEST_F(BlackjackGameTest, BothBlackjackResultsInPush) {
   bool foundBothBlackjack = false;
-  
-  for (int i = 0; i < 500 && !foundBothBlackjack; i++) {
+
+  for (int i = 0; i < 2000 && !foundBothBlackjack; i++) {
     game.startRound();
-    
-    if (game.getPlayerHand().isBlackjack() && 
+
+    if (game.getPlayerHand().isBlackjack() &&
         game.getDealerHand(false).isBlackjack()) {
       foundBothBlackjack = true;
       EXPECT_TRUE(game.isRoundComplete());
       EXPECT_EQ(game.getOutcome(), Outcome::PUSH);
     }
+    game.reset();
   }
+
+  EXPECT_TRUE(foundBothBlackjack);
 }
 
 // === Outcome Tests ===
@@ -294,37 +296,49 @@ TEST_F(BlackjackGameTest, GetOutcomeThrowsWhenRoundNotComplete) {
 }
 
 TEST_F(BlackjackGameTest, PlayerWinOutcome) {
-  game.startRound();
-  
-  // Keep hitting until we have a good hand, then stand
-  // This is probabilistic, but should eventually result in player win
-  while (!game.isRoundComplete() && game.getPlayerHand().getTotal() < 18) {
-    if (game.getPlayerHand().getTotal() < 17) {
-      game.hit();
-    } else {
-      game.stand();
-      break;
+  bool foundPlayerWin = false;
+
+  for (int i = 0; i < 200 && !foundPlayerWin; ++i) {
+    game.startRound();
+
+    // Stand on 17+; otherwise hit
+    while (!game.isRoundComplete()) {
+      if (game.getPlayerHand().getTotal() >= 17) {
+        game.stand();
+      } else {
+        game.hit();
+      }
     }
-  }
-  
-  if (game.isRoundComplete() && !game.getPlayerHand().isBust()) {
+
     Outcome outcome = game.getOutcome();
-    // Valid outcomes
-    EXPECT_TRUE(outcome == Outcome::PLAYER_WIN ||
-                outcome == Outcome::DEALER_WIN ||
-                outcome == Outcome::PUSH ||
-                outcome == Outcome::DEALER_BUST);
+    if (outcome == Outcome::PLAYER_WIN || outcome == Outcome::PLAYER_BLACKJACK) {
+      foundPlayerWin = true;
+    }
+    game.reset();
   }
+
+  EXPECT_TRUE(foundPlayerWin);
 }
 
 TEST_F(BlackjackGameTest, DealerBustOutcome) {
-  game.startRound();
-  game.stand();
-  
-  if (game.getDealerHand(false).isBust()) {
-    Outcome outcome = game.getOutcome();
-    EXPECT_EQ(outcome, Outcome::DEALER_BUST);
+  bool foundDealerBust = false;
+
+  for (int i = 0; i < 200 && !foundDealerBust; ++i) {
+    game.startRound();
+
+    if (!game.isRoundComplete()) {
+      game.stand(); // stand immediately so dealer must play
+    }
+
+    if (game.isRoundComplete() &&
+        game.getOutcome() == Outcome::DEALER_BUST) {
+      foundDealerBust = true;
+      EXPECT_TRUE(game.getDealerHand(false).isBust());
+    }
+    game.reset();
   }
+
+  EXPECT_TRUE(foundDealerBust);
 }
 
 // === Dealer Hand Visibility Tests ===

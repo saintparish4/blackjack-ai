@@ -79,6 +79,8 @@ set(TEST_SOURCES
     tests/test_hand.cpp
     tests/test_game.cpp
     tests/test_q_learning.cpp
+    tests/test_trainer.cpp
+    tests/test_evaluator.cpp
 )
 
 add_executable(run_tests ${TEST_SOURCES})

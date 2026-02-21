@@ -1,12 +1,14 @@
 #include "Deck.hpp"
 #include <algorithm>
+#include <optional>
 #include <random>
 #include <stdexcept>
 
 namespace blackjack {
 
-Deck::Deck(size_t numDecks)
-    : currentIndex_(0), numDecks_(numDecks), rng_(std::random_device{}()) {
+Deck::Deck(size_t numDecks, std::optional<uint32_t> seed)
+    : currentIndex_(0), numDecks_(numDecks),
+      rng_(seed ? *seed : std::random_device{}()) {
   if (numDecks == 0) {
     throw std::invalid_argument("Number of decks must be at least 1");
   }

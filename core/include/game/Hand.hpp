@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Card.hpp"
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -41,6 +42,7 @@ public:
 
 private:
   std::vector<Card> cards_;
+  mutable std::optional<Value> cachedValue_;
 };
 
 } // namespace blackjack

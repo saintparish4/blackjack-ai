@@ -1,6 +1,5 @@
 #include "Evaluator.hpp"
 #include "../ai/GameStateConverter.hpp"
-#include <random>
 
 namespace blackjack {
 namespace training {
@@ -185,7 +184,7 @@ EvaluationResult Evaluator::evaluate(ai::Agent *agent, size_t numGames,
 
   // Compare with basic strategy
   if (compareStrategy) {
-    result.strategyAccuracy = compareWithBasicStrategy(agent, 1000);
+    result.strategyAccuracy = compareWithBasicStrategy(agent);
   }
 
   return result;
@@ -211,67 +210,38 @@ Outcome Evaluator::playGame(ai::Agent *agent, BlackjackGame &game) {
     ai::Action action = agent->chooseAction(state, validActions, false);
 
     // Execute action
-    switch (action) {
-    case ai::Action::HIT:
-      game.hit();
-      break;
-    case ai::Action::STAND:
-      game.stand();
-      break;
-    case ai::Action::DOUBLE:
-      if (!game.doubleDown()) {
-        game.hit();
-      }
-      break;
-    case ai::Action::SPLIT:
-      // Fallback to hit
-      game.hit();
-      break;
-    }
+    ai::GameStateConverter::executeAction(action, game);
   }
 
   return game.getOutcome();
 }
 
-double Evaluator::compareWithBasicStrategy(ai::Agent *agent,
-                                           size_t numSamples) {
+double Evaluator::compareWithBasicStrategy(ai::Agent *agent) {
   size_t matches = 0;
-  std::mt19937 rng(std::random_device{}());
+  size_t total = 0;
 
-  // Sample various game states
-  std::uniform_int_distribution<int> playerDist(12, 20);
-  std::uniform_int_distribution<int> dealerDist(2, 11);
-  std::uniform_int_distribution<int> softDist(0, 1);
+  for (int playerTotal = 4; playerTotal <= 21; ++playerTotal) {
+    for (int dealerCard = 1; dealerCard <= 10; ++dealerCard) {
+      for (bool hasUsableAce : {false, true}) {
+        ai::State state(playerTotal, dealerCard, hasUsableAce);
+        if (!state.isValid()) continue;
 
-  for (size_t i = 0; i < numSamples; ++i) {
-    int playerTotal = playerDist(rng);
-    int dealerCard = dealerDist(rng);
-    bool hasUsableAce = (softDist(rng) == 1);
+        std::vector<ai::Action> validActions = {ai::Action::HIT,
+                                                ai::Action::STAND};
+        if (playerTotal >= 9 && playerTotal <= 11) {
+          validActions.push_back(ai::Action::DOUBLE);
+        }
 
-    // Convert dealer 11 to 1 (ace)
-    if (dealerCard == 11)
-      dealerCard = 1;
-
-    ai::State state(playerTotal, dealerCard, hasUsableAce);
-
-    // Get valid actions (simplified - assume HIT and STAND always valid)
-    std::vector<ai::Action> validActions = {ai::Action::HIT, ai::Action::STAND};
-
-    // Add DOUBLE for certain totals
-    if (playerTotal >= 9 && playerTotal <= 11) {
-      validActions.push_back(ai::Action::DOUBLE);
-    }
-
-    // Get agent's action
-    ai::Action agentAction = agent->chooseAction(state, validActions, false);
-
-    // Check if it matches basic strategy
-    if (basicStrategy_.isCorrectAction(state, agentAction)) {
-      matches++;
+        ai::Action agentAction = agent->chooseAction(state, validActions, false);
+        if (basicStrategy_.isCorrectAction(state, agentAction)) {
+          matches++;
+        }
+        total++;
+      }
     }
   }
 
-  return static_cast<double>(matches) / numSamples;
+  return total > 0 ? static_cast<double>(matches) / total : 0.0;
 }
 } // namespace training
 } // namespace blackjack

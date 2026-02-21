@@ -1,4 +1,5 @@
 #include "BlackjackGame.hpp"
+#include <optional>
 #include <stdexcept>
 
 namespace blackjack {
@@ -22,8 +23,9 @@ std::string outcomeToString(Outcome outcome) {
   }
 }
 
-BlackjackGame::BlackjackGame(const GameRules &rules)
-    : rules_(rules), deck_(std::make_unique<Deck>(rules.numDecks)),
+BlackjackGame::BlackjackGame(const GameRules &rules,
+                             std::optional<uint32_t> seed)
+    : rules_(rules), deck_(std::make_unique<Deck>(rules.numDecks, seed)),
       roundComplete_(false), handCount_(0) {}
 
 void BlackjackGame::startRound() {

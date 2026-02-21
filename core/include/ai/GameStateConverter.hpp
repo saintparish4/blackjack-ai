@@ -30,6 +30,7 @@ public:
 
   static std::vector<Action> getValidActions(const Hand &playerHand) {
     std::vector<Action> actions;
+    actions.reserve(4);
     actions.push_back(Action::HIT);
     actions.push_back(Action::STAND);
     if (playerHand.size() == 2) {
@@ -39,6 +40,26 @@ public:
       actions.push_back(Action::SPLIT);
     }
     return actions;
+  }
+
+  /** Executes action in game; falls back to HIT for unimplemented SPLIT. */
+  static bool executeAction(Action action, BlackjackGame &game) {
+    switch (action) {
+    case Action::HIT:
+      return game.hit();
+    case Action::STAND:
+      game.stand();
+      return true;
+    case Action::DOUBLE:
+      if (!game.doubleDown()) {
+        return game.hit(); // fallback when double not allowed
+      }
+      return true;
+    case Action::SPLIT:
+      // TODO: Implement split; fall back to hit
+      return game.hit();
+    }
+    return false;
   }
 
   /** Rewards: blackjack +1.5, win +1, push 0, loss/bust -1. */

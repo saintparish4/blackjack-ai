@@ -25,16 +25,19 @@ inline std::string actionToString(Action action) {
   }
 }
 
-/** One step: (state, action, reward, next_state, done). */
+/** One step: (state, action, reward, next_state, done, valid_next_actions). */
 struct Experience {
   State state;
   Action action;
   double reward;
   State nextState;
   bool done;
+  std::vector<Action> validNextActions;
 
-  Experience(const State &s, Action a, double r, const State &ns, bool d)
-      : state(s), action(a), reward(r), nextState(ns), done(d) {}
+  Experience(const State &s, Action a, double r, const State &ns, bool d,
+             std::vector<Action> vna = {})
+      : state(s), action(a), reward(r), nextState(ns), done(d),
+        validNextActions(std::move(vna)) {}
 };
 
 /** Base interface for learning agents. */
@@ -52,6 +55,9 @@ public:
   virtual void save(const std::string &filepath) const = 0;
   virtual void load(const std::string &filepath) = 0;
   virtual std::string getName() const = 0;
+
+  virtual double getExplorationRate() const { return 0.0; }
+  virtual size_t getStateCount() const { return 0; }
 };
 } // namespace ai
 } // namespace blackjack

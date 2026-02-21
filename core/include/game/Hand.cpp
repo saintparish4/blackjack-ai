@@ -5,11 +5,21 @@
 
 namespace blackjack {
 
-void Hand::addCard(const Card &card) { cards_.push_back(card); }
+void Hand::addCard(const Card &card) {
+  cards_.push_back(card);
+  cachedValue_.reset();
+}
 
-void Hand::clear() { cards_.clear(); }
+void Hand::clear() {
+  cards_.clear();
+  cachedValue_.reset();
+}
 
 Hand::Value Hand::getValue() const {
+  if (cachedValue_) {
+    return *cachedValue_;
+  }
+
   int total = 0;
   int aces = 0;
 
@@ -32,7 +42,8 @@ Hand::Value Hand::getValue() const {
   // Hand is soft if it has at least one ace still counting as 11
   bool isSoft = (aces > 0) && (total <= 21);
 
-  return {total, isSoft};
+  cachedValue_ = {total, isSoft};
+  return *cachedValue_;
 }
 
 bool Hand::isBlackjack() const {
@@ -92,6 +103,7 @@ Card Hand::split() {
 
   Card secondCard = cards_[1];
   cards_.pop_back();
+  cachedValue_.reset();
 
   return secondCard;
 }

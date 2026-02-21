@@ -17,14 +17,9 @@ void signalHandler(int signum) {
   std::cout << "\n\nInterrupt signal (" << signum << ") received.\n";
 
   if (g_trainer) {
-    std::cout << "Saving checkpoint before exiting...\n";
-    g_trainer->pause();
-
-    // Trainer will auto-save on destruction
-    std::cout << "Checkpoint saved. Exiting...\n";
+    std::cout << "Requesting clean stop...\n";
+    g_trainer->requestStop();
   }
-
-  exit(signum);
 }
 
 int main(int argc, char *argv[]) {

@@ -41,9 +41,14 @@ void QLearningAgent::learn(const Experience &experience) {
   if (done) {
     targetQ = reward;
   } else {
-    std::vector<Action> allActions = {Action::HIT, Action::STAND,
-                                      Action::DOUBLE, Action::SPLIT};
-    double maxNextQ = qTable_.getMaxQ(nextState, allActions);
+    double maxNextQ;
+    if (experience.validNextActions.empty()) {
+      // Terminal or unknown next state: fall back to the two base actions
+      static const std::vector<Action> fallback = {Action::HIT, Action::STAND};
+      maxNextQ = qTable_.getMaxQ(nextState, fallback);
+    } else {
+      maxNextQ = qTable_.getMaxQ(nextState, experience.validNextActions);
+    }
     targetQ = reward + params_.discountFactor * maxNextQ;
   }
 
@@ -107,6 +112,7 @@ void QLearningAgent::load(const std::string &filepath) {
     std::string key = line.substr(0, colonPos);
     std::string value = line.substr(colonPos + 2);
 
+   
     if (key == "epsilon") {
       epsilon_ = std::stod(value);
     } else if (key == "step_count") {

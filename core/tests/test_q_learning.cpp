@@ -100,7 +100,8 @@ TEST_F(QLearningTest, PolicyTableSaveAndLoad) {
   table1.set(s, Action::HIT, 0.123);
   table1.set(s, Action::STAND, 0.456);
 
-  std::string filepath = "/tmp/test_qtable.bin";
+  std::string filepath =
+      (std::filesystem::temp_directory_path() / "test_qtable.bin").string();
   table1.saveToBinary(filepath);
 
   PolicyTable table2;
@@ -233,7 +234,8 @@ TEST_F(QLearningTest, AgentSaveAndLoad) {
   double q2 = agent1.getQValue(s2, Action::STAND);
 
   // Save agent
-  std::string filepath = "/tmp/test_agent";
+  std::string filepath =
+      (std::filesystem::temp_directory_path() / "test_agent").string();
   agent1.save(filepath);
 
   // Load into new agent

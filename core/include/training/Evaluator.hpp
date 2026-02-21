@@ -89,13 +89,14 @@ public:
                             bool compareStrategy = true);
 
   /**
-   * @brief Compare agent's strategy with basic strategy
+   * @brief Compare agent's strategy with basic strategy via exhaustive iteration
    *
-   * @param agent Agent to compare
-   * @param numSamples Number of states to sample
-   * @return Accuracy (0-1, percentage of matching actions)
+   * Iterates all valid (playerTotal 4-21) x (dealerCard 1-10) x (soft/hard)
+   * states rather than random sampling, giving a deterministic accuracy score.
+   *
+   * @return Accuracy (0-1, fraction of states where agent matches basic strategy)
    */
-  double compareWithBasicStrategy(ai::Agent *agent, size_t numSamples = 1000);
+  double compareWithBasicStrategy(ai::Agent *agent);
 
   /**
    * @brief Get basic strategy reference

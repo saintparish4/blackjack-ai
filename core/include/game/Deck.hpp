@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Card.hpp"
+#include <optional>
 #include <random>
 #include <vector>
 
@@ -9,7 +10,7 @@ namespace blackjack {
 /** Deck of cards; supports multiple 52-card decks and Fisher-Yates shuffle. */
 class Deck {
 public:
-  explicit Deck(size_t numDecks = 1);
+  explicit Deck(size_t numDecks = 1, std::optional<uint32_t> seed = std::nullopt);
 
   void shuffle();
 

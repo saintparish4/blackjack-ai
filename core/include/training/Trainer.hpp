@@ -4,6 +4,7 @@
 #include "../game/BlackjackGame.hpp"
 #include "Evaluator.hpp"
 #include "Logger.hpp"
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <vector>
@@ -150,6 +151,16 @@ public:
   void resume() { paused_ = false; }
 
   /**
+   * @brief Request clean stop (saves checkpoint before exiting loop)
+   */
+  void requestStop() { shouldStop_ = true; }
+
+  /**
+   * @brief Check if a stop has been requested
+   */
+  bool shouldStop() const { return shouldStop_; }
+
+  /**
    * @brief Check if training should stop early
    */
   bool shouldStopEarly() const;
@@ -166,7 +177,8 @@ private:
 
   std::function<void(const TrainingMetrics &)> progressCallback_;
 
-  bool paused_;
+  std::atomic<bool> paused_;
+  std::atomic<bool> shouldStop_;
   size_t episodesSinceImprovement_;
   double bestWinRate_;
 

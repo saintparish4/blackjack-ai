@@ -22,7 +22,8 @@ namespace blackjack {
     /** Single-player vs dealer; manages state, rules, and dealer play. */
     class BlackjackGame {
     public:
-        explicit BlackjackGame(const GameRules& rules = GameRules{});
+        explicit BlackjackGame(const GameRules& rules = GameRules{},
+                               std::optional<uint32_t> seed = std::nullopt);
         void startRound();
 
         /** @return true if action was applied. */
