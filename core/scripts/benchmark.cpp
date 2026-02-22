@@ -1,13 +1,24 @@
 #include "ai/QLearningAgent.hpp"
 #include "game/BlackjackGame.hpp"
+#include "util/ArgParser.hpp"
 #include <chrono>
 #include <iostream>
 
 using namespace blackjack;
 using namespace blackjack::ai;
+using namespace blackjack::util;
 
-int main() {
+int main(int argc, char* argv[]) {
   std::cout << "=== Blackjack Core Engine Benchmark ===\n\n";
+
+  ArgParser args("benchmark", "Blackjack Core Engine Benchmark");
+  args.addFlag("games", "g", "Games for simulation bench", "100000");
+  args.addFlag("decisions", "d", "Decisions for agent bench", "1000000");
+  args.addBool("help", "h", "Show this help message");
+  if (!args.parse(argc, argv)) return 0;
+
+  const int NUM_GAMES = args.getInt("games");
+  const int NUM_DECISIONS = args.getInt("decisions");
 
   // Benchmark 1: Game simulation speed
   {
@@ -15,8 +26,6 @@ int main() {
 
     BlackjackGame game;
     auto start = std::chrono::high_resolution_clock::now();
-
-    const int NUM_GAMES = 100000;
     int playerWins = 0;
 
     for (int i = 0; i < NUM_GAMES; ++i) {
@@ -74,8 +83,6 @@ int main() {
     std::vector<Action> validActions = {Action::HIT, Action::STAND};
 
     auto start = std::chrono::high_resolution_clock::now();
-
-    const int NUM_DECISIONS = 1000000;
 
     for (int i = 0; i < NUM_DECISIONS; ++i) {
       State s(16, 10, false);

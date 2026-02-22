@@ -20,11 +20,11 @@ struct Divergence {
 
 /** Output from a full convergence analysis. */
 struct ConvergenceResult {
-    double               accuracy;       ///< Fraction of states matching basic strategy (0-1)
-    bool                 passed;         ///< accuracy >= passing threshold
-    size_t               totalStates;
-    size_t               matchingStates;
-    std::vector<Divergence> divergences; ///< All divergent states, sorted by qMargin desc
+    double               accuracy       = 0.0;   ///< Fraction of states matching basic strategy (0-1)
+    bool                 passed         = false;  ///< accuracy >= passing threshold
+    size_t               totalStates    = 0;
+    size_t               matchingStates = 0;
+    std::vector<Divergence> divergences;          ///< All divergent states, sorted by qMargin desc
 };
 
 /**

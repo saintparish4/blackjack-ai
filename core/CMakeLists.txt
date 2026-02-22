@@ -58,6 +58,7 @@ set(TRAINING_SOURCES
     include/training/Evaluator.cpp
     include/training/Logger.cpp
     include/training/Trainer.cpp
+    include/training/StrategyChart.cpp 
 )
 
 add_library(blackjack_training STATIC ${TRAINING_SOURCES})
@@ -104,6 +105,10 @@ target_link_libraries(train blackjack_training)
 add_executable(benchmark scripts/benchmark.cpp)
 target_link_libraries(benchmark blackjack_training)
 
+# === Play Executable ===
+add_executable(play scripts/play.cpp)
+target_link_libraries(play blackjack_training)
+
 # Create necessary directories
 file(MAKE_DIRECTORY ${PROJECT_SOURCE_DIR}/checkpoints)
 file(MAKE_DIRECTORY ${PROJECT_SOURCE_DIR}/logs)
@@ -125,4 +130,5 @@ message(STATUS "  - blackjack_ai (library)")
 message(STATUS "  - train (executable)")
 message(STATUS "  - run_tests (executable)")
 message(STATUS "  - benchmark (executable)")
+message(STATUS "  - play (executable)")
 message(STATUS "=================================")

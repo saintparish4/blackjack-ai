@@ -92,6 +92,7 @@ core/models/
 coverage/
 
 # Personal notes / AI guidance (local only)
+book/
 docs/cmd.md
 CLAUDE.md
 

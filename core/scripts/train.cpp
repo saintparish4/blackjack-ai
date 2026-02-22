@@ -7,6 +7,7 @@
 #include <csignal>
 #include <iostream>
 #include <memory>
+#include "util/ArgParser.hpp" 
 
 using namespace blackjack;
 using namespace blackjack::ai;
@@ -45,23 +46,18 @@ int main(int argc, char *argv[]) {
   std::cout << "Blackjack Q-Learning Training\n";
   std::cout << "========================\n\n";
 
-  // --- Argument parsing ---
-  // Named: --config FILE
-  // Positional (legacy): episodes  [checkpoint-path]
-  // Priority: positional CLI > config file > built-in defaults
-  std::string configFile;
-  std::vector<std::string> positional;
+  // --- Argument parsing (named flags only; CLI overrides config) ---
+  ArgParser args("train", "Blackjack Q-Learning Trainer");
+  args.addFlag("episodes", "e", "Number of training episodes", "1000000");
+  args.addFlag("checkpoint", "c", "Resume from checkpoint file", "");
+  args.addFlag("config", "", "Load INI config file", "");
+  args.addFlag("rules", "r", "Rule preset name", "vegas-strip");
+  args.addBool("verbose", "v", "Enable verbose output");
+  args.addBool("help", "h", "Show this help message");
+  if (!args.parse(argc, argv)) return 0;
 
-  for (int i = 1; i < argc; ++i) {
-    std::string arg(argv[i]);
-    if (arg == "--config" && i + 1 < argc) {
-      configFile = argv[++i];
-    } else if (arg.rfind("--", 0) != 0) {
-      positional.push_back(arg);
-    } else {
-      std::cerr << "Warning: unrecognised flag '" << arg << "' (ignored).\n";
-    }
-  }
+  std::string configFile;
+  if (args.has("config")) configFile = args.getString("config");
 
   // --- Load config file ---
   ConfigParser cfg;
@@ -75,16 +71,12 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  // --- Episodes and checkpoint (positional args override config) ---
+  // Episodes: CLI > config > default
   size_t numEpisodes = static_cast<size_t>(cfg.getInt("episodes", 1'000'000));
-  std::string checkpointLoad = "";
+  if (args.has("episodes")) numEpisodes = std::stoul(args.getString("episodes"));
 
-  if (!positional.empty()) {
-    numEpisodes = std::stoul(positional[0]);
-  }
-  if (positional.size() >= 2) {
-    checkpointLoad = positional[1];
-  }
+  std::string checkpointLoad;
+  if (args.has("checkpoint")) checkpointLoad = args.getString("checkpoint");
 
   // --- Q-learning hyperparameters ---
   QLearningAgent::Hyperparameters agentParams;
@@ -101,8 +93,9 @@ int main(int argc, char *argv[]) {
     agent->load(checkpointLoad);
   }
 
-  // --- Game rules (preset then per-field overrides) ---
+  // Rules preset: CLI > config > default
   std::string preset = cfg.getString("rules_preset", "vegas-strip");
+  if (args.has("rules")) preset = args.getString("rules");
   GameRules gameRules = rulesFromPreset(preset);
 
   if (cfg.has("num_decks"))
@@ -120,7 +113,10 @@ int main(int argc, char *argv[]) {
   config.checkpointFrequency   = static_cast<size_t>(cfg.getInt("checkpoint_frequency",50'000));
   config.checkpointDir         = cfg.getString("checkpoint_dir", "./checkpoints");
   config.logDir                = cfg.getString("log_dir",        "./logs");
-  config.verbose               = cfg.getBool("verbose",          true);
+  // Verbose: CLI flag overrides config
+  bool verbose = cfg.getBool("verbose", true);
+  if (args.has("verbose")) verbose = true;
+  config.verbose               = verbose;
   config.earlyStoppingPatience = static_cast<size_t>(cfg.getInt("early_stopping_patience", 10));
   config.minImprovement        = cfg.getDouble("min_improvement", 0.001);
   config.gameRules             = gameRules;

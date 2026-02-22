@@ -1,6 +1,8 @@
 #include "Trainer.hpp"
 #include "../ai/GameStateConverter.hpp"
+#include "../util/ProgressBar.hpp"
 #include "ConvergenceReport.hpp"
+#include "StrategyChart.hpp"
 #include <algorithm>
 #include <filesystem>
 #include <iomanip>
@@ -47,6 +49,9 @@ TrainingMetrics Trainer::trainEpisodes(size_t numEpisodes) {
 
   size_t startEpisode = currentMetrics_.totalEpisodes;
   size_t endEpisode = startEpisode + numEpisodes;
+
+  util::ProgressBar progressBar(numEpisodes, 1000);
+  if (!config_.verbose) progressBar.setSilent(true);
 
   // Training loop
   for (size_t episode = startEpisode; episode < endEpisode; ++episode) {
@@ -96,6 +101,16 @@ TrainingMetrics Trainer::trainEpisodes(size_t numEpisodes) {
     if ((episode + 1) % config_.checkpointFrequency == 0) {
       saveCheckpoint(episode + 1);
     }
+
+    // Progress bar update (info only on eval episodes when metrics are fresh)
+    std::string info;
+    if ((episode + 1) % config_.evalFrequency == 0) {
+      info = "Win: " +
+             std::to_string(static_cast<int>(currentMetrics_.winRate * 100)) +
+             "%" + " | eps: " +
+             std::to_string(currentMetrics_.currentEpsilon).substr(0, 5);
+    }
+    progressBar.update(episode + 1 - startEpisode, info);
   }
 
   // Final evaluation
@@ -103,6 +118,7 @@ TrainingMetrics Trainer::trainEpisodes(size_t numEpisodes) {
     std::cout << "\nRunning final evaluation...\n";
   }
   evaluate();
+  progressBar.finish("Done");
 
   // Final checkpoint
   saveCheckpoint(currentMetrics_.totalEpisodes);
@@ -317,6 +333,9 @@ void Trainer::runConvergenceReport() {
   ConvergenceReport report;
   ConvergenceResult result = report.analyze(*agent_, evaluator_->getBasicStrategy());
   report.print(result, std::cout);
+
+  StrategyChart chart;
+  chart.print(*agent_, evaluator_->getBasicStrategy(), std::cout);
 }
 } // namespace training
 } // namespace blackjack
