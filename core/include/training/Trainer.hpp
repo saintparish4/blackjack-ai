@@ -5,6 +5,7 @@
 #include "Evaluator.hpp"
 #include "Logger.hpp"
 #include <atomic>
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <vector>
@@ -44,6 +45,21 @@ struct TrainingConfig {
 
   /// Minimum improvement to reset patience counter (0.1 = 0.1%)
   double minImprovement = 0.001;
+
+  // ---- Reporting fields (used by saveTrainingReport) ----
+
+  /// Directory for training report output (default: ./analysis)
+  std::string reportDir = "./analysis";
+
+  /// Human-readable rule preset name for the report header
+  std::string rulesPresetName = "default";
+
+  /// Agent hyperparameters stored here for inclusion in the report
+  double learningRate   = 0.1;
+  double discountFactor = 0.95;
+  double epsilon        = 1.0;
+  double epsilonDecay   = 0.99995;
+  double epsilonMin     = 0.01;
 };
 
 /**
@@ -181,6 +197,7 @@ private:
   std::atomic<bool> shouldStop_;
   size_t episodesSinceImprovement_;
   double bestWinRate_;
+  std::chrono::steady_clock::time_point trainingStartTime_;
 
   /**
    * @brief Execute evaluation
@@ -212,11 +229,12 @@ private:
                     const std::vector<bool> &wasDoubledByHand);
 
   /**
-   * @brief Run exhaustive convergence check against basic strategy and print results.
+   * @brief Run exhaustive convergence check against basic strategy, print to
+   * stdout (if verbose), and save a full text report to reportDir.
    *
-   * Called automatically at the end of train() when verbose is enabled.
+   * Called automatically at the end of train().
    */
-  void runConvergenceReport();
+  void runAndSaveReport(const TrainingMetrics &finalMetrics);
 };
 } // namespace training
 } // namespace blackjack

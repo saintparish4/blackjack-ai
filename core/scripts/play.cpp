@@ -747,7 +747,7 @@ void printReport(QLearningAgent &agent, const GameRules &rules) {
 // ---------------------------------------------------------------------------
 int main(int argc, char *argv[]) {
     ArgParser args("play", "Blackjack Interactive Play");
-    args.addFlag("mode",   "m", "Play mode: human, ai, advisor", "", true);
+    args.addFlag("mode",   "m", "Play mode: human, ai, advisor [required unless --report]", "", false);
     args.addFlag("model",  "",  "Path to trained model file");
     args.addFlag("hands",  "n", "Number of hands to play", "10");
     args.addFlag("rules",  "r", "Rule preset name", "vegas-strip");
@@ -781,6 +781,10 @@ int main(int argc, char *argv[]) {
         return 0;
     }
 
+    if (!args.has("mode")) {
+        std::cerr << "Missing required option: --mode\n";
+        return 1;
+    }
     std::string mode        = args.getString("mode");
     int         numHands    = args.getInt("hands");
     bool        beginnerMode = args.getBool("beginner");

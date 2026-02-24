@@ -72,24 +72,41 @@ StrategyChart::validActionsForState(const ai::State &state) {
 }
 
 void StrategyChart::print(ai::Agent &agent, const BasicStrategy &basicStrategy,
-                          std::ostream &out) const {
-  out << "\n" << BOLD << "=== Strategy Chart ===" << RESET << "\n";
-  out << "Legend: " << GREEN << "H" << RESET << "=matches basic strategy  "
-      << RED << "H" << RESET << "=diverges  " << YELLOW << "H" << RESET
-      << "=uncertain (margin<" << marginThreshold_ << ")\n";
+                          std::ostream &out, bool forceNoColor) const {
+  bool useColor = !forceNoColor && isTerminal();
+
+  if (useColor) {
+    out << "\n" << BOLD << "=== Strategy Chart ===" << RESET << "\n";
+    out << "Legend: " << GREEN << "H" << RESET << "=matches basic strategy  "
+        << RED << "H" << RESET << "=diverges  " << YELLOW << "H" << RESET
+        << "=uncertain (margin<" << marginThreshold_ << ")\n";
+  } else {
+    out << "\n=== Strategy Chart ===\n";
+    out << "Legend: UPPER=matches basic strategy  lower=diverges\n"
+        << "  margin<" << marginThreshold_ << " treated as uncertain\n";
+  }
   out << "Actions: H=Hit S=Stand D=Double P=Split R=Surrender\n";
 
-  out << "\n" << BOLD << "--- Hard Totals ---" << RESET << "\n";
-  printGrid(agent, basicStrategy, false, out);
+  if (useColor) {
+    out << "\n" << BOLD << "--- Hard Totals ---" << RESET << "\n";
+  } else {
+    out << "\n--- Hard Totals ---\n";
+  }
+  printGrid(agent, basicStrategy, false, out, forceNoColor);
 
-  out << "\n" << BOLD << "--- Soft Totals ---" << RESET << "\n";
-  printGrid(agent, basicStrategy, true, out);
+  if (useColor) {
+    out << "\n" << BOLD << "--- Soft Totals ---" << RESET << "\n";
+  } else {
+    out << "\n--- Soft Totals ---\n";
+  }
+  printGrid(agent, basicStrategy, true, out, forceNoColor);
 }
 
 void StrategyChart::printGrid(ai::Agent &agent,
                               const BasicStrategy &basicStrategy,
-                              bool softTotals, std::ostream &out) const {
-  bool useColor = isTerminal();
+                              bool softTotals, std::ostream &out,
+                              bool forceNoColor) const {
+  bool useColor = !forceNoColor && isTerminal();
 
   // Dealer upcards: 2,3,4,5,6,7,8,9,10,A
   // Display header

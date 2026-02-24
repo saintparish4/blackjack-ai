@@ -5,8 +5,10 @@
 #include "StrategyChart.hpp"
 #include <algorithm>
 #include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <thread>
 
 
@@ -17,7 +19,8 @@ Trainer::Trainer(std::shared_ptr<ai::Agent> agent, const TrainingConfig &config)
       game_(std::make_unique<BlackjackGame>(config.gameRules)),
       evaluator_(std::make_unique<Evaluator>(config.gameRules)),
       logger_(std::make_unique<Logger>(config.logDir)), paused_(false),
-      shouldStop_(false), episodesSinceImprovement_(0), bestWinRate_(0.0) {
+      shouldStop_(false), episodesSinceImprovement_(0), bestWinRate_(0.0),
+      trainingStartTime_(std::chrono::steady_clock::now()) {
   // Create checkpoint directory if it doesn't exist
   std::filesystem::create_directories(config_.checkpointDir);
   std::filesystem::create_directories(config_.logDir);
@@ -36,9 +39,7 @@ Trainer::Trainer(std::shared_ptr<ai::Agent> agent, const TrainingConfig &config)
 
 TrainingMetrics Trainer::train() {
   TrainingMetrics metrics = trainEpisodes(config_.numEpisodes);
-  if (config_.verbose) {
-    runConvergenceReport();
-  }
+  runAndSaveReport(metrics);
   return metrics;
 }
 
@@ -329,13 +330,166 @@ bool Trainer::shouldStopEarly() const {
   return episodesSinceImprovement_ >= config_.earlyStoppingPatience;
 }
 
-void Trainer::runConvergenceReport() {
-  ConvergenceReport report;
-  ConvergenceResult result = report.analyze(*agent_, evaluator_->getBasicStrategy());
-  report.print(result, std::cout);
+// ---- helpers for runAndSaveReport -------------------------------------------
 
+namespace {
+
+/** Emit improvement suggestions based on convergence quality and final metrics. */
+void writeSuggestions(const ConvergenceResult &cr, const TrainingMetrics &m,
+                      std::ostream &out) {
+  out << "\n=== Improvement Suggestions ===\n";
+  bool any = false;
+
+  if (!cr.passed) {
+    out << "  • Strategy accuracy ("
+        << std::fixed << std::setprecision(1) << (cr.accuracy * 100)
+        << "%) is below the 90% threshold.\n"
+        << "    Try training for more episodes (e.g. 2M+) or reduce epsilon_decay.\n";
+    any = true;
+  }
+
+  size_t critCount = 0;
+  size_t softDivCount = 0;
+  for (const auto &d : cr.divergences) {
+    if (d.isCritical)       ++critCount;
+    if (d.state.hasUsableAce) ++softDivCount;
+  }
+
+  if (critCount > 0) {
+    out << "  • " << critCount << " critical state(s) diverge from basic strategy.\n"
+        << "    High-stakes hands (hard 16 vs strong dealer, hard 10/11) need more exploration.\n";
+    any = true;
+  }
+
+  if (!cr.divergences.empty() &&
+      softDivCount > cr.divergences.size() / 2) {
+    out << "  • Soft-total strategy shows above-average divergences ("
+        << softDivCount << " states).\n"
+        << "    Ace-involved hands are rare; extended training usually resolves these.\n";
+    any = true;
+  }
+
+  if (m.winRate < 0.42) {
+    out << "  • Win rate ("
+        << std::fixed << std::setprecision(1) << (m.winRate * 100)
+        << "%) is below basic strategy (~43%).\n"
+        << "    Consider more episodes, a slower epsilon_decay, or a higher learning_rate.\n";
+    any = true;
+  }
+
+  if (m.statesLearned < 150) {
+    out << "  • Only " << m.statesLearned
+        << " states explored — Q-table is underpopulated.\n"
+        << "    Slow epsilon decay (e.g. 0.9999) allows broader exploration.\n";
+    any = true;
+  }
+
+  if (!any) {
+    out << "  • Agent closely matches basic strategy and win rate looks healthy.\n"
+        << "    No major issues detected — consider running a longer eval for confidence.\n";
+  }
+  out << "================================\n";
+}
+
+} // anonymous namespace
+
+void Trainer::runAndSaveReport(const TrainingMetrics &finalMetrics) {
+  // Compute convergence once; reuse for both terminal output and file report.
+  ConvergenceReport convergenceReport;
+  ConvergenceResult cr = convergenceReport.analyze(*agent_, evaluator_->getBasicStrategy());
+
+  // ----- Terminal output (colored strategy chart + convergence) -----
+  if (config_.verbose) {
+    StrategyChart chart;
+    chart.print(*agent_, evaluator_->getBasicStrategy(), std::cout);
+    convergenceReport.print(cr, std::cout);
+    writeSuggestions(cr, finalMetrics, std::cout);
+  }
+
+  // ----- Build plain-text report for file -----
+  auto endTime    = std::chrono::steady_clock::now();
+  auto durationSec = std::chrono::duration_cast<std::chrono::seconds>(
+                         endTime - trainingStartTime_).count();
+
+  std::ostringstream oss;
+
+  oss << "============================================================\n"
+      << "            Blackjack AI Training Report\n"
+      << "============================================================\n\n";
+
+  // 1. Configuration
+  oss << "--- Configuration ---\n";
+  oss << std::left << std::setw(24) << "Rules preset"
+      << ": " << config_.rulesPresetName   << "\n";
+  oss << std::setw(24) << "Num decks"
+      << ": " << config_.gameRules.numDecks << "\n";
+  oss << std::setw(24) << "Dealer hits soft 17"
+      << ": " << (config_.gameRules.dealerHitsSoft17 ? "yes" : "no") << "\n";
+  oss << std::setw(24) << "Surrender enabled"
+      << ": " << (config_.gameRules.surrender ? "yes" : "no") << "\n";
+  oss << std::setw(24) << "Blackjack payout"
+      << ": " << config_.gameRules.blackjackPayout << ":1\n";
+  oss << std::setw(24) << "Learning rate"
+      << ": " << config_.learningRate   << "\n";
+  oss << std::setw(24) << "Discount factor"
+      << ": " << config_.discountFactor << "\n";
+  oss << std::setw(24) << "Epsilon start"
+      << ": " << config_.epsilon        << "\n";
+  oss << std::setw(24) << "Epsilon decay"
+      << ": " << config_.epsilonDecay   << "\n";
+  oss << std::setw(24) << "Epsilon min"
+      << ": " << config_.epsilonMin     << "\n";
+  oss << std::setw(24) << "Eval frequency"
+      << ": " << config_.evalFrequency  << " episodes\n";
+  oss << std::setw(24) << "Eval games"
+      << ": " << config_.evalGames      << "\n";
+
+  // 2. Training stats
+  oss << "\n--- Training Stats ---\n";
+  oss << std::setw(24) << "Total episodes"
+      << ": " << finalMetrics.totalEpisodes << "\n";
+  oss << std::setw(24) << "Duration"
+      << ": " << durationSec << " seconds\n";
+  if (durationSec > 0) {
+    oss << std::setw(24) << "Episodes / sec"
+        << ": " << (finalMetrics.totalEpisodes / static_cast<size_t>(durationSec)) << "\n";
+  }
+  oss << std::setw(24) << "States learned"
+      << ": " << finalMetrics.statesLearned << "\n";
+  oss << std::setw(24) << "Final epsilon"
+      << ": " << std::fixed << std::setprecision(6)
+      << finalMetrics.currentEpsilon << "\n";
+
+  // 3. Final metrics
+  oss << "\n--- Final Performance ---\n";
+  oss << std::fixed << std::setprecision(2);
+  oss << std::setw(24) << "Win rate"  << ": " << (finalMetrics.winRate  * 100) << "%\n";
+  oss << std::setw(24) << "Loss rate" << ": " << (finalMetrics.lossRate * 100) << "%\n";
+  oss << std::setw(24) << "Push rate" << ": " << (finalMetrics.pushRate * 100) << "%\n";
+  oss << std::setw(24) << "Bust rate" << ": " << (finalMetrics.bustRate * 100) << "%\n";
+  oss << std::setw(24) << "Avg reward"<< ": " << std::setprecision(4)
+      << finalMetrics.avgReward << "\n";
+
+  // 4. Strategy chart (plain text — uppercase=correct, lowercase=diverges)
   StrategyChart chart;
-  chart.print(*agent_, evaluator_->getBasicStrategy(), std::cout);
+  chart.print(*agent_, evaluator_->getBasicStrategy(), oss, /*forceNoColor=*/true);
+
+  // 5 & 6. Convergence report (includes top-N divergences table)
+  convergenceReport.print(cr, oss);
+
+  // 7. Improvement suggestions
+  writeSuggestions(cr, finalMetrics, oss);
+
+  // ----- Write to file -----
+  std::filesystem::create_directories(config_.reportDir);
+  std::string reportPath = config_.reportDir + "/training_report.txt";
+  std::ofstream file(reportPath);
+  if (file) {
+    file << oss.str();
+    std::cout << "\nTraining report saved: " << reportPath << "\n";
+  } else {
+    std::cerr << "Warning: could not write training report to " << reportPath << "\n";
+  }
 }
 } // namespace training
 } // namespace blackjack

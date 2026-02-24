@@ -13,8 +13,10 @@ public:
   // marginThreshold: Q-value margin below this → yellow (uncertain)
   explicit StrategyChart(double marginThreshold = 0.05);
 
+  // forceNoColor=true suppresses ANSI codes regardless of terminal detection
+  // (use when writing to a file or ostringstream).
   void print(ai::Agent &agent, const BasicStrategy &basicStrategy,
-             std::ostream &out = std::cout) const;
+             std::ostream &out = std::cout, bool forceNoColor = false) const;
 
 private:
   double marginThreshold_;
@@ -40,7 +42,8 @@ private:
   static std::vector<ai::Action> validActionsForState(const ai::State &state);
 
   void printGrid(ai::Agent &agent, const BasicStrategy &basicStrategy,
-                 bool softTotals, std::ostream &out) const;
+                 bool softTotals, std::ostream &out,
+                 bool forceNoColor = false) const;
 };
 
 } // namespace training

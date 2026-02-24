@@ -113,6 +113,7 @@ int main(int argc, char *argv[]) {
   config.checkpointFrequency   = static_cast<size_t>(cfg.getInt("checkpoint_frequency",50'000));
   config.checkpointDir         = cfg.getString("checkpoint_dir", "./checkpoints");
   config.logDir                = cfg.getString("log_dir",        "./logs");
+  config.reportDir             = cfg.getString("report_dir",     "./analysis");
   // Verbose: CLI flag overrides config
   bool verbose = cfg.getBool("verbose", true);
   if (args.has("verbose")) verbose = true;
@@ -120,6 +121,13 @@ int main(int argc, char *argv[]) {
   config.earlyStoppingPatience = static_cast<size_t>(cfg.getInt("early_stopping_patience", 10));
   config.minImprovement        = cfg.getDouble("min_improvement", 0.001);
   config.gameRules             = gameRules;
+  // Reporting fields
+  config.rulesPresetName       = preset;
+  config.learningRate          = agentParams.learningRate;
+  config.discountFactor        = agentParams.discountFactor;
+  config.epsilon               = agentParams.epsilon;
+  config.epsilonDecay          = agentParams.epsilonDecay;
+  config.epsilonMin            = agentParams.epsilonMin;
 
   // --- Create trainer ---
   g_trainer = std::make_unique<Trainer>(agent, config);
