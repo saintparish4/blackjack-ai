@@ -105,32 +105,40 @@ void BasicStrategy::initializeSoftStrategy() {
   }
 }
 
-ai::Action BasicStrategy::getAction(const ai::State &state) const {
+ai::Action BasicStrategy::getAction(const ai::State &state,
+                                    bool allowSurrender) const {
   int dealerCard = state.dealerUpCard;
   if (dealerCard == 1)
     dealerCard = 11; // Convert ace to 11 for lookup
 
   auto key = std::make_pair(state.playerTotal, dealerCard);
+  ai::Action action;
 
   if (state.hasUsableAce) {
     auto it = softStrategy_.find(key);
-    if (it != softStrategy_.end()) {
-      return it->second;
-    }
+    action = (it != softStrategy_.end())
+                 ? it->second
+                 : ((state.playerTotal < 17) ? ai::Action::HIT
+                                             : ai::Action::STAND);
   } else {
     auto it = hardStrategy_.find(key);
-    if (it != hardStrategy_.end()) {
-      return it->second;
-    }
+    action = (it != hardStrategy_.end())
+                 ? it->second
+                 : ((state.playerTotal < 17) ? ai::Action::HIT
+                                             : ai::Action::STAND);
   }
 
-  // Default: hit if < 17, stand if >= 17
-  return (state.playerTotal < 17) ? ai::Action::HIT : ai::Action::STAND;
+  // Every state the table marks SURRENDER (hard 15 v 10, hard 16 v 9/10/A) is
+  // a hit under rules that do not offer it.
+  if (action == ai::Action::SURRENDER && !allowSurrender) {
+    return ai::Action::HIT;
+  }
+  return action;
 }
 
-bool BasicStrategy::isCorrectAction(const ai::State &state,
-                                    ai::Action action) const {
-  ai::Action optimalAction = getAction(state);
+bool BasicStrategy::isCorrectAction(const ai::State &state, ai::Action action,
+                                    bool allowSurrender) const {
+  ai::Action optimalAction = getAction(state, allowSurrender);
 
   // DOUBLE can be substituted with HIT
   if (optimalAction == ai::Action::DOUBLE && action == ai::Action::HIT) {
@@ -184,14 +192,19 @@ EvaluationResult Evaluator::evaluate(ai::Agent *agent, size_t numGames,
       }
       totalReward += ai::GameStateConverter::outcomeToReward(outcome, doubled);
     }
+    result.handsPlayed += outcomes.size();
   }
 
-  // Calculate rates
-  result.winRate = static_cast<double>(result.wins) / numGames;
-  result.lossRate = static_cast<double>(result.losses) / numGames;
-  result.pushRate = static_cast<double>(result.pushes) / numGames;
+  // Outcome rates are per settled hand — a split round contributes two hands —
+  // while reward stays per round, since one round is one initial bet.
+  const double hands = result.handsPlayed > 0
+                           ? static_cast<double>(result.handsPlayed)
+                           : 1.0;
+  result.winRate = static_cast<double>(result.wins) / hands;
+  result.lossRate = static_cast<double>(result.losses) / hands;
+  result.pushRate = static_cast<double>(result.pushes) / hands;
   result.avgReward = totalReward / numGames;
-  result.bustRate = static_cast<double>(result.busts) / numGames;
+  result.bustRate = static_cast<double>(result.busts) / hands;
 
   // Compare with basic strategy
   if (compareStrategy) {
@@ -242,9 +255,12 @@ double Evaluator::compareWithBasicStrategy(ai::Agent *agent) {
         if (playerTotal >= 9 && playerTotal <= 11) {
           validActions.push_back(ai::Action::DOUBLE);
         }
-        // Surrender-relevant states (two-card hand): hard 15 vs 10, hard 16 vs 9/10/A
+        // Surrender-relevant states (two-card hand): hard 15 vs 10, hard 16 vs 9/10/A.
+        // Only offered when the rules actually allow it. Otherwise SURRENDER is
+        // never trained, so its Q stays at 0.0 and beats the (negative) Q of
+        // every real action, handing the agent free credit on these states.
         int dealerForLookup = (dealerCard == 1) ? 11 : dealerCard;
-        if (!hasUsableAce &&
+        if (rules_.surrender && !hasUsableAce &&
             ((playerTotal == 15 && dealerForLookup == 10) ||
              (playerTotal == 16 && (dealerForLookup == 9 || dealerForLookup == 10 ||
                                     dealerForLookup == 11)))) {
@@ -252,7 +268,7 @@ double Evaluator::compareWithBasicStrategy(ai::Agent *agent) {
         }
 
         ai::Action agentAction = agent->chooseAction(state, validActions, false);
-        if (basicStrategy_.isCorrectAction(state, agentAction)) {
+        if (basicStrategy_.isCorrectAction(state, agentAction, rules_.surrender)) {
           matches++;
         }
         total++;

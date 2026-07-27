@@ -11,25 +11,29 @@ namespace training {
  * @brief Result of agent evaluation
  */
 struct EvaluationResult {
-  size_t gamesPlayed;
+  size_t gamesPlayed; ///< Rounds dealt
+  size_t handsPlayed; ///< Settled hands; exceeds gamesPlayed when hands split
   size_t wins;
   size_t losses;
   size_t pushes;
   size_t blackjacks;
   size_t busts;
 
-  double winRate;   ///< Wins / total games
-  double lossRate;  ///< Losses / total games
-  double pushRate;  ///< Pushes / total games
-  double avgReward; ///< Average reward per game
-  double bustRate;  ///< Bust / total games
+  // Rates are per settled hand, not per round: a split round settles two hands
+  // independently, so dividing by gamesPlayed would let the three rates sum
+  // above 1.0.
+  double winRate;   ///< Wins / total hands
+  double lossRate;  ///< Losses / total hands
+  double pushRate;  ///< Pushes / total hands
+  double avgReward; ///< Average reward per round (per initial bet)
+  double bustRate;  ///< Busts / total hands
 
   double strategyAccuracy; ///< Match with basic strategy (0-1)
 
   EvaluationResult()
-      : gamesPlayed(0), wins(0), losses(0), pushes(0), blackjacks(0), busts(0),
-        winRate(0.0), lossRate(0.0), pushRate(0.0), avgReward(0.0),
-        bustRate(0.0), strategyAccuracy(0.0) {}
+      : gamesPlayed(0), handsPlayed(0), wins(0), losses(0), pushes(0),
+        blackjacks(0), busts(0), winRate(0.0), lossRate(0.0), pushRate(0.0),
+        avgReward(0.0), bustRate(0.0), strategyAccuracy(0.0) {}
 };
 
 /**
@@ -45,12 +49,20 @@ public:
   /**
    * @brief Get optimal action for state
    */
-  ai::Action getAction(const ai::State &state) const;
+  /**
+   * @param allowSurrender  When false, states whose book play is SURRENDER
+   *   fall back to their no-surrender play (HIT). Pass the value of
+   *   GameRules::surrender: scoring an agent against a SURRENDER
+   *   recommendation it was never allowed to learn measures nothing.
+   */
+  ai::Action getAction(const ai::State &state,
+                       bool allowSurrender = true) const;
 
   /**
    * @brief Check if action matches basic strategy
    */
-  bool isCorrectAction(const ai::State &state, ai::Action action) const;
+  bool isCorrectAction(const ai::State &state, ai::Action action,
+                       bool allowSurrender = true) const;
 
 private:
   // Strategy tables: [player total][dealer up card] -> Action

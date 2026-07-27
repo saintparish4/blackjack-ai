@@ -19,7 +19,8 @@ ConvergenceReport::ConvergenceReport(double passingThreshold,
 // ---- public interface ----
 
 ConvergenceResult ConvergenceReport::analyze(ai::Agent& agent,
-                                             const BasicStrategy& basicStrategy) const {
+                                             const BasicStrategy& basicStrategy,
+                                             bool allowSurrender) const {
     ConvergenceResult result;
 
     for (int playerTotal = 4; playerTotal <= 21; ++playerTotal) {
@@ -28,18 +29,18 @@ ConvergenceResult ConvergenceReport::analyze(ai::Agent& agent,
                 ai::State state(playerTotal, dealerCard, soft);
                 if (!state.isValid()) continue;
 
-                std::vector<ai::Action> valid = validActionsForState(state);
+                std::vector<ai::Action> valid = validActionsForState(state, allowSurrender);
                 ++result.totalStates;
 
                 ai::Action agentAction = agent.chooseAction(state, valid, false);
 
-                if (basicStrategy.isCorrectAction(state, agentAction)) {
+                if (basicStrategy.isCorrectAction(state, agentAction, allowSurrender)) {
                     ++result.matchingStates;
                 } else {
                     Divergence div;
                     div.state         = state;
                     div.agentAction   = agentAction;
-                    div.optimalAction = basicStrategy.getAction(state);
+                    div.optimalAction = basicStrategy.getAction(state, allowSurrender);
                     div.qMargin       = computeQMargin(agent, state, valid);
                     div.isCritical    = isCriticalState(state);
                     result.divergences.push_back(div);
@@ -169,7 +170,8 @@ double ConvergenceReport::computeQMargin(ai::Agent& agent,
     return (top2 == -std::numeric_limits<double>::max()) ? 0.0 : (top1 - top2);
 }
 
-std::vector<ai::Action> ConvergenceReport::validActionsForState(const ai::State& state) {
+std::vector<ai::Action> ConvergenceReport::validActionsForState(const ai::State& state,
+                                                                bool allowSurrender) {
     // Mirrors the logic in Evaluator::compareWithBasicStrategy so the two
     // accuracy numbers are computed from the same state space.
     std::vector<ai::Action> valid = {ai::Action::HIT, ai::Action::STAND};
@@ -178,9 +180,13 @@ std::vector<ai::Action> ConvergenceReport::validActionsForState(const ai::State&
         valid.push_back(ai::Action::DOUBLE);
     }
 
-    // Surrender-eligible states (hard 15 vs 10, hard 16 vs 9/10/A)
+    // Surrender-eligible states (hard 15 vs 10, hard 16 vs 9/10/A), and only
+    // under rules that offer surrender. With it disabled the action is never
+    // trained, so its Q-value sits at 0.0 while every real action on these
+    // losing hands is negative — greedy selection then "chooses" surrender and
+    // scores a match it did not learn, inflating accuracy by four states.
     int d = (state.dealerUpCard == 1) ? 11 : state.dealerUpCard;
-    if (!state.hasUsableAce &&
+    if (allowSurrender && !state.hasUsableAce &&
         ((state.playerTotal == 15 && d == 10) ||
          (state.playerTotal == 16 && (d == 9 || d == 10 || d == 11)))) {
         valid.push_back(ai::Action::SURRENDER);

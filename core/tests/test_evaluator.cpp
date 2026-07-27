@@ -19,24 +19,128 @@ protected:
   }
 };
 
+namespace {
+
+/// Splits whenever the rules allow it, so evaluation rounds settle more hands
+/// than they deal rounds. Everything else stands.
+class AlwaysSplitAgent : public Agent {
+public:
+  Action chooseAction(const State &, const std::vector<Action> &validActions,
+                      bool) override {
+    for (Action a : validActions) {
+      if (a == Action::SPLIT) {
+        return Action::SPLIT;
+      }
+    }
+    return Action::STAND;
+  }
+
+  void learn(const Experience &) override {}
+  double getQValue(const State &, Action) const override { return 0.0; }
+  void save(const std::string &) const override {}
+  void load(const std::string &) override {}
+  std::string getName() const override { return "AlwaysSplit"; }
+};
+
+} // namespace
+
 // === Metrics correctness ===
 
-TEST_F(EvaluatorTest, WinLossPushCountsSumToGamesPlayed) {
+TEST_F(EvaluatorTest, WinLossPushCountsSumToHandsPlayed) {
   auto result = evaluator.evaluate(agent.get(), 100, false);
 
   EXPECT_EQ(result.gamesPlayed, 100u);
-  EXPECT_EQ(result.wins + result.losses + result.pushes, 100u);
+  EXPECT_EQ(result.wins + result.losses + result.pushes, result.handsPlayed);
 }
 
 TEST_F(EvaluatorTest, RatesMatchCounts) {
   auto result = evaluator.evaluate(agent.get(), 200, false);
 
   EXPECT_NEAR(result.winRate,
-              static_cast<double>(result.wins) / result.gamesPlayed, 1e-9);
+              static_cast<double>(result.wins) / result.handsPlayed, 1e-9);
   EXPECT_NEAR(result.lossRate,
-              static_cast<double>(result.losses) / result.gamesPlayed, 1e-9);
+              static_cast<double>(result.losses) / result.handsPlayed, 1e-9);
   EXPECT_NEAR(result.pushRate,
-              static_cast<double>(result.pushes) / result.gamesPlayed, 1e-9);
+              static_cast<double>(result.pushes) / result.handsPlayed, 1e-9);
+}
+
+// A split round settles two hands off one deal. Rates are per hand, so they
+// must still sum to 1.0 even when handsPlayed exceeds gamesPlayed — dividing
+// hand counts by gamesPlayed pushed this sum above 1.0.
+TEST_F(EvaluatorTest, RatesSumToOneWhenHandsAreSplit) {
+  AlwaysSplitAgent splitter;
+  auto result = evaluator.evaluate(&splitter, 500, false);
+
+  ASSERT_GT(result.handsPlayed, result.gamesPlayed)
+      << "expected at least one split across 500 rounds";
+  EXPECT_EQ(result.wins + result.losses + result.pushes, result.handsPlayed);
+  EXPECT_NEAR(result.winRate + result.lossRate + result.pushRate, 1.0, 1e-9);
+}
+
+TEST_F(EvaluatorTest, HandsPlayedIsAtLeastGamesPlayed) {
+  auto result = evaluator.evaluate(agent.get(), 100, false);
+
+  EXPECT_GE(result.handsPlayed, result.gamesPlayed);
+}
+
+// === Surrender availability in strategy comparison ===
+
+// Under rules without surrender the action is never trained, so its Q-value
+// stays at the 0.0 initial value. Hard 15/16 against a strong upcard are losing
+// hands whose trained actions all carry negative Q, so offering SURRENDER here
+// lets an untouched 0.0 win the argmax — the agent then "matches" the book's
+// surrender recommendation on four states it never learned.
+TEST_F(EvaluatorTest, SurrenderIsNotOfferedWhenRulesDisallowIt) {
+  GameRules noSurrender = GameRules::vegasStrip();
+  ASSERT_FALSE(noSurrender.surrender);
+  Evaluator strict(noSurrender);
+
+  // A fresh agent has every Q-value at 0.0 — the exact condition that made
+  // spurious surrenders win.
+  QLearningAgent::Hyperparameters params;
+  params.epsilon = 0.0;
+  params.epsilonMin = 0.0;
+  QLearningAgent untrained(params);
+
+  for (int total : {15, 16}) {
+    for (int dealer : {9, 10, 1}) {
+      if (total == 15 && dealer != 10) continue;
+      State state(total, dealer, false);
+      auto valid = std::vector<Action>{Action::HIT, Action::STAND};
+      EXPECT_NE(untrained.chooseAction(state, valid, false), Action::SURRENDER);
+    }
+  }
+
+  // Book play for these states collapses to HIT without surrender available.
+  const BasicStrategy &book = strict.getBasicStrategy();
+  EXPECT_EQ(book.getAction(State(16, 10, false), /*allowSurrender=*/false),
+            Action::HIT);
+  EXPECT_EQ(book.getAction(State(15, 10, false), /*allowSurrender=*/false),
+            Action::HIT);
+  // ...and remains SURRENDER when the rules do offer it.
+  EXPECT_EQ(book.getAction(State(16, 10, false), /*allowSurrender=*/true),
+            Action::SURRENDER);
+}
+
+TEST_F(EvaluatorTest, SurrenderRulesChangeMeasuredAccuracy) {
+  QLearningAgent::Hyperparameters params;
+  params.epsilon = 0.0;
+  params.epsilonMin = 0.0;
+  QLearningAgent untrained(params);
+
+  Evaluator withSurrender(GameRules::atlanticCity());
+  Evaluator withoutSurrender(GameRules::vegasStrip());
+  ASSERT_TRUE(GameRules::atlanticCity().surrender);
+  ASSERT_FALSE(GameRules::vegasStrip().surrender);
+
+  double lenient = withSurrender.compareWithBasicStrategy(&untrained);
+  double strict = withoutSurrender.compareWithBasicStrategy(&untrained);
+
+  // Both are legitimate measurements, but they must not be the same number:
+  // the surrender ruleset grades against a different book on four states.
+  EXPECT_NE(lenient, strict);
+  EXPECT_GE(lenient, 0.0);
+  EXPECT_LE(strict, 1.0);
 }
 
 TEST_F(EvaluatorTest, BustCountSubsetOfLosses) {

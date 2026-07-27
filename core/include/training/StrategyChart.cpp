@@ -56,14 +56,15 @@ StrategyChart::computeMargin(ai::Agent &agent, const ai::State &state,
 }
 
 std::vector<ai::Action>
-StrategyChart::validActionsForState(const ai::State &state) {
+StrategyChart::validActionsForState(const ai::State &state,
+                                    bool allowSurrender) {
   // Mirror ConvergenceReport::validActionsForState
   std::vector<ai::Action> valid = {ai::Action::HIT, ai::Action::STAND};
   if (state.playerTotal >= 9 && state.playerTotal <= 11) {
     valid.push_back(ai::Action::DOUBLE);
   }
   int d = (state.dealerUpCard == 1) ? 11 : state.dealerUpCard;
-  if (!state.hasUsableAce &&
+  if (allowSurrender && !state.hasUsableAce &&
       ((state.playerTotal == 15 && d == 10) ||
        (state.playerTotal == 16 && (d == 9 || d == 10 || d == 11)))) {
     valid.push_back(ai::Action::SURRENDER);
@@ -72,7 +73,8 @@ StrategyChart::validActionsForState(const ai::State &state) {
 }
 
 void StrategyChart::print(ai::Agent &agent, const BasicStrategy &basicStrategy,
-                          std::ostream &out, bool forceNoColor) const {
+                          std::ostream &out, bool forceNoColor,
+                          bool allowSurrender) const {
   bool useColor = !forceNoColor && isTerminal();
 
   if (useColor) {
@@ -92,20 +94,20 @@ void StrategyChart::print(ai::Agent &agent, const BasicStrategy &basicStrategy,
   } else {
     out << "\n--- Hard Totals ---\n";
   }
-  printGrid(agent, basicStrategy, false, out, forceNoColor);
+  printGrid(agent, basicStrategy, false, out, forceNoColor, allowSurrender);
 
   if (useColor) {
     out << "\n" << BOLD << "--- Soft Totals ---" << RESET << "\n";
   } else {
     out << "\n--- Soft Totals ---\n";
   }
-  printGrid(agent, basicStrategy, true, out, forceNoColor);
+  printGrid(agent, basicStrategy, true, out, forceNoColor, allowSurrender);
 }
 
 void StrategyChart::printGrid(ai::Agent &agent,
                               const BasicStrategy &basicStrategy,
                               bool softTotals, std::ostream &out,
-                              bool forceNoColor) const {
+                              bool forceNoColor, bool allowSurrender) const {
   bool useColor = !forceNoColor && isTerminal();
 
   // Dealer upcards: 2,3,4,5,6,7,8,9,10,A
@@ -130,9 +132,9 @@ void StrategyChart::printGrid(ai::Agent &agent,
       int dealerCard = dealerCards[i];
       ai::State state(playerTotal, dealerCard, softTotals);
 
-      std::vector<ai::Action> valid = validActionsForState(state);
+      std::vector<ai::Action> valid = validActionsForState(state, allowSurrender);
       ai::Action agentAction = agent.chooseAction(state, valid, false);
-      bool matches = basicStrategy.isCorrectAction(state, agentAction);
+      bool matches = basicStrategy.isCorrectAction(state, agentAction, allowSurrender);
       double margin = computeMargin(agent, state, valid);
       char ch = actionChar(agentAction);
 

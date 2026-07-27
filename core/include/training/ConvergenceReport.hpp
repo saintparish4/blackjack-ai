@@ -49,9 +49,16 @@ public:
     explicit ConvergenceReport(double passingThreshold    = 0.90,
                                size_t maxDivergencesShown = 15);
 
-    /** Run the analysis. The agent is queried in exploit mode (training=false). */
+    /**
+     * Run the analysis. The agent is queried in exploit mode (training=false).
+     *
+     * @param allowSurrender  Pass GameRules::surrender. When surrender is off,
+     *   it is excluded from both the offered actions and the book play it is
+     *   scored against; see validActionsForState.
+     */
     ConvergenceResult analyze(ai::Agent& agent,
-                              const BasicStrategy& basicStrategy) const;
+                              const BasicStrategy& basicStrategy,
+                              bool allowSurrender = true) const;
 
     /** Print a formatted report to the given stream (default: stdout). */
     void print(const ConvergenceResult& result,
@@ -73,7 +80,8 @@ private:
                                  const std::vector<ai::Action>& validActions);
 
     /** Build the valid action set for a state, matching compareWithBasicStrategy logic. */
-    static std::vector<ai::Action> validActionsForState(const ai::State& state);
+    static std::vector<ai::Action> validActionsForState(const ai::State& state,
+                                                        bool allowSurrender = true);
 };
 
 } // namespace training

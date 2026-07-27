@@ -735,10 +735,12 @@ void printReport(QLearningAgent &agent, const GameRules &rules) {
     Evaluator evaluator(rules);
 
     StrategyChart chart;
-    chart.print(agent, evaluator.getBasicStrategy());
+    chart.print(agent, evaluator.getBasicStrategy(), std::cout,
+                /*forceNoColor=*/false, rules.surrender);
 
     ConvergenceReport report;
-    auto result = report.analyze(agent, evaluator.getBasicStrategy());
+    auto result = report.analyze(agent, evaluator.getBasicStrategy(),
+                                 rules.surrender);
     report.print(result);
 }
 

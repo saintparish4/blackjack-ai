@@ -15,8 +15,11 @@ public:
 
   // forceNoColor=true suppresses ANSI codes regardless of terminal detection
   // (use when writing to a file or ostringstream).
+  // allowSurrender should carry GameRules::surrender so the chart does not
+  // offer an action the agent was never allowed to learn.
   void print(ai::Agent &agent, const BasicStrategy &basicStrategy,
-             std::ostream &out = std::cout, bool forceNoColor = false) const;
+             std::ostream &out = std::cout, bool forceNoColor = false,
+             bool allowSurrender = true) const;
 
 private:
   double marginThreshold_;
@@ -39,11 +42,13 @@ private:
                               const std::vector<ai::Action> &validActions);
 
   // Build valid action set (same as ConvergenceReport::validActionsForState)
-  static std::vector<ai::Action> validActionsForState(const ai::State &state);
+  static std::vector<ai::Action> validActionsForState(const ai::State &state,
+                                                      bool allowSurrender = true);
 
   void printGrid(ai::Agent &agent, const BasicStrategy &basicStrategy,
                  bool softTotals, std::ostream &out,
-                 bool forceNoColor = false) const;
+                 bool forceNoColor = false,
+                 bool allowSurrender = true) const;
 };
 
 } // namespace training
