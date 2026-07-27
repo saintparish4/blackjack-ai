@@ -96,6 +96,7 @@ book/
 docs/cmd.md
 CLAUDE.md
 IMPLEMENTATION_GUIDE.txt
+.claude/
 
 # Python (core/bindings/python)
 core/bindings/python/
