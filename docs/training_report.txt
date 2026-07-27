@@ -1,0 +1,114 @@
+============================================================
+            Blackjack AI Training Report
+============================================================
+
+--- Configuration ---
+Rules preset            : vegas-strip
+Num decks               : 6
+Dealer hits soft 17     : no
+Surrender enabled       : no
+Blackjack payout        : 1.5:1
+Learning rate           : 0.05
+Discount factor         : 0.95
+Epsilon start           : 1
+Epsilon decay           : 0.999999
+Epsilon min             : 0.05
+Eval frequency          : 25000 episodes
+Eval games              : 2000
+
+--- Training Stats ---
+Total episodes          : 5000000
+Duration                : 4 seconds
+Episodes / sec          : 1250000
+States learned          : 620
+Final epsilon           : 0.050000
+
+--- Final Performance ---
+Win rate                : 42.05%
+Loss rate               : 50.15%
+Push rate               : 7.81%
+Bust rate               : 20.03%
+Avg reward              : -0.0583
+
+=== Strategy Chart ===
+Legend: UPPER=matches basic strategy  lower=diverges
+  margin<0.0500 treated as uncertain
+Actions: H=Hit S=Stand D=Double P=Split R=Surrender
+
+--- Hard Totals ---
+      2  3  4  5  6  7  8  9  T  A  
+4       H  H  s  H  H  H  H  H  H  H
+5       H  H  H  H  H  H  H  H  H  H
+6       H  H  H  H  H  H  H  H  H  H
+7       H  H  H  H  H  H  H  H  H  H
+8       H  H  H  s  H  H  H  H  H  H
+9       H  H  H  H  H  H  H  d  d  d
+10      H  H  H  H  H  H  H  H  d  d
+11      H  H  H  H  H  H  H  H  H  H
+12      H  H  h  h  S  s  H  H  H  H
+13      h  h  S  h  h  H  H  H  H  H
+14      S  S  h  h  h  H  H  H  H  H
+15      S  S  h  S  S  H  s  H  H  H
+16      S  h  S  S  S  H  H  H  H  s
+17      S  S  S  S  S  S  S  h  S  h
+18      S  S  S  S  S  S  S  S  S  S
+19      S  S  S  S  S  S  S  S  S  S
+20      S  S  S  S  S  S  S  S  S  S
+21      S  S  S  S  S  S  S  S  S  S
+
+--- Soft Totals ---
+      2  3  4  5  6  7  8  9  T  A  
+13      H  H  H  H  H  H  H  H  H  H
+14      H  H  H  H  H  H  H  H  H  H
+15      H  H  H  H  H  H  H  H  H  H
+16      H  H  H  H  H  H  H  H  H  H
+17      H  s  s  H  H  H  H  H  H  H
+18      h  h  h  h  h  h  h  H  H  H
+19      S  S  S  S  S  S  S  S  h  S
+20      S  S  S  S  S  S  S  S  S  S
+21      S  S  S  S  S  S  S  S  S  S
+
+=== Convergence Report ===
+Strategy accuracy : 90.6% (326/360 states)
+Threshold         : 90.0%
+Status            : PASS ✓
+Divergences       : 34 (12 critical, 22 minor)
+
+Top 15 divergences (critical first, then by Q-value margin):
+State               Agent       Optimal         Margin  Type    
+----------------------------------------------------------------
+hard 15 vs 8        STAND       HIT            0.2987  CRITICAL
+soft 18 vs 5        HIT         STAND          0.1592  CRITICAL
+hard 12 vs 7        STAND       HIT            0.1209  CRITICAL
+soft 18 vs 6        HIT         STAND          0.1191  CRITICAL
+soft 18 vs 3        HIT         STAND          0.0915  CRITICAL
+hard 10 vs 10       DOUBLE      HIT            0.0717  CRITICAL
+soft 18 vs 8        HIT         STAND          0.0617  CRITICAL
+soft 18 vs 4        HIT         STAND          0.0566  CRITICAL
+hard 16 vs A        STAND       HIT            0.0484  CRITICAL
+soft 18 vs 7        HIT         STAND          0.0390  CRITICAL
+hard 10 vs A        DOUBLE      HIT            0.0210  CRITICAL
+soft 18 vs 2        HIT         STAND          0.0145  CRITICAL
+hard 17 vs A        HIT         STAND          0.4934  minor
+hard 16 vs 3        HIT         STAND          0.4064  minor
+hard 14 vs 5        HIT         STAND          0.3267  minor
+
+Critical divergences:
+  hard 15 vs 8       agent=STAND     optimal=HIT       margin=0.2987
+  soft 18 vs 5       agent=HIT       optimal=STAND     margin=0.1592
+  hard 12 vs 7       agent=STAND     optimal=HIT       margin=0.1209
+  soft 18 vs 6       agent=HIT       optimal=STAND     margin=0.1191
+  soft 18 vs 3       agent=HIT       optimal=STAND     margin=0.0915
+  hard 10 vs 10      agent=DOUBLE    optimal=HIT       margin=0.0717
+  soft 18 vs 8       agent=HIT       optimal=STAND     margin=0.0617
+  soft 18 vs 4       agent=HIT       optimal=STAND     margin=0.0566
+  hard 16 vs A       agent=STAND     optimal=HIT       margin=0.0484
+  soft 18 vs 7       agent=HIT       optimal=STAND     margin=0.0390
+  hard 10 vs A       agent=DOUBLE    optimal=HIT       margin=0.0210
+  soft 18 vs 2       agent=HIT       optimal=STAND     margin=0.0145
+==========================
+
+=== Improvement Suggestions ===
+  • 12 critical state(s) diverge from basic strategy.
+    High-stakes hands (hard 16 vs strong dealer, hard 10/11) need more exploration.
+================================
