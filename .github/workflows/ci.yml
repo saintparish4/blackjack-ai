@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.compiler }} / ubuntu
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - compiler: g++
+            cc: gcc
+          - compiler: clang++
+            cc: clang
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          cmake --version
+          ${{ matrix.compiler }} --version
+
+      # googletest is pulled in via FetchContent; caching the populated _deps
+      # tree keeps the clone+build off the critical path on repeat runs.
+      - name: Cache googletest
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: ${{ runner.os }}-${{ matrix.compiler }}-deps-${{ hashFiles('core/CMakeLists.txt') }}
+
+      - name: Configure
+        run: cmake -B build -S core -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=${{ matrix.compiler }}
+
+      # CMakeLists sets -Wall -Wextra -Werror -pedantic, so warnings fail here.
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      # Exercises the full train -> evaluate -> report -> save pipeline, which
+      # the unit tests only cover in pieces.
+      - name: Smoke test training pipeline
+        working-directory: core
+        run: |
+          ../build/train --episodes 20000
+          test -f models/final_agent.qtable
+          test -f analysis/q_table.csv
+
+      - name: Smoke test strategy report
+        working-directory: core
+        run: ../build/play --report --model ./models/final_agent
