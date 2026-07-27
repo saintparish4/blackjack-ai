@@ -3,7 +3,7 @@
 [![CI](https://github.com/saintparish4/blackjack-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/saintparish4/blackjack-ai/actions/workflows/ci.yml)
 [![C++17](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus&logoColor=white)](https://en.cppreference.com/w/cpp/17)
 [![CMake](https://img.shields.io/badge/build-CMake-064F8C?logo=cmake&logoColor=white)](https://cmake.org/)
-[![Tests](https://img.shields.io/badge/tests-104%20passing-3fb950)](core/tests)
+[![Tests](https://img.shields.io/badge/tests-106%20passing-3fb950)](core/tests)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
 A C++17 Q-learning agent that learns blackjack strategy from scratch through self-play — no rules,
@@ -225,7 +225,7 @@ cd build && ctest --output-on-failure
 ./build/run_tests --gtest_filter="TrainerTest.*"
 ```
 
-104 tests across 6 suites, run on every push against both GCC and Clang (see
+106 tests across 6 suites, run on every push against both GCC and Clang (see
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)). CI also builds with `-Wall -Wextra -Werror
 -pedantic` and smoke-tests the full train → evaluate → report → save pipeline, which the unit tests
 only cover in pieces.
@@ -289,7 +289,7 @@ blackjack-ai/
 │   │   ├── training/      # Trainer, Evaluator, Logger, ConvergenceReport, StrategyChart
 │   │   └── util/          # ArgParser, ConfigParser, ProgressBar
 │   ├── scripts/           # train.cpp, play.cpp, benchmark.cpp
-│   └── tests/             # 104 unit tests (Google Test)
+│   └── tests/             # 106 unit tests (Google Test)
 ├── analysis/
 │   ├── plot_training.py   # Python visualisation script
 │   └── requirements.txt   # matplotlib, pandas
