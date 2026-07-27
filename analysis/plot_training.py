@@ -87,12 +87,13 @@ def _apply_episode_axis(ax: plt.Axes) -> None:
     ax.xaxis.set_major_formatter(ticker.FuncFormatter(_episode_formatter))
 
 
-def _style_axes(ax: plt.Axes, xlabel: str, ylabel: str, title: str) -> None:
+def _style_axes(ax: plt.Axes, xlabel: str, ylabel: str, title: str,
+                legend_loc: str = "best") -> None:
     ax.set_xlabel(xlabel, fontsize=11)
     ax.set_ylabel(ylabel, fontsize=11)
     ax.set_title(title, fontsize=13, fontweight="bold")
     ax.grid(True, alpha=0.3, linestyle="--")
-    ax.legend(fontsize=10)
+    ax.legend(fontsize=10, loc=legend_loc, framealpha=0.9)
     _apply_episode_axis(ax)
 
 
@@ -119,8 +120,19 @@ def plot_learning_curve(data: pd.DataFrame, output_dir: str) -> None:
     ax.axhline(BASIC_STRATEGY_WIN_RATE, color="#7f8c8d", linestyle="--",
                linewidth=1.2, label=f"Basic strategy (~{BASIC_STRATEGY_WIN_RATE}%)")
 
-    ax.set_ylim(0, 65)
-    _style_axes(ax, "Episode", "Rate (%)", "Learning Curve — Win / Loss / Push Rates")
+    # Blackjack win rate is capped near 43% even under perfect play, so it
+    # saturates almost immediately and hides the actual learning. Strategy
+    # accuracy keeps climbing well after it flattens; plot it when present.
+    if "strategy_accuracy" in data.columns:
+        ax.plot(data["episode"], data["strategy_accuracy"] * 100,
+                color="#8e44ad", linewidth=2.2, label="Strategy accuracy")
+
+    ax.set_ylim(0, 105)
+    # Accuracy climbs steeply over the first ~1M episodes in the top left, so
+    # the legend is pinned away from it rather than left on "best".
+    _style_axes(ax, "Episode", "Rate (%)",
+                "Learning Curve — Outcome Rates and Strategy Accuracy",
+                legend_loc="lower right")
 
     _save(fig, os.path.join(output_dir, "learning_curve.png"))
 
@@ -187,8 +199,25 @@ def plot_q_heatmap(qtable_path: str, output_dir: str) -> None:
         print("  Skipping Q-heatmap: no hard-total rows in Q-table.")
         return
 
-    hard["best_q"] = hard[q_cols].max(axis=1)
-    hard["best_action"] = hard[q_cols].idxmax(axis=1).str.replace("Q_", "", regex=False)
+    # Only argmax over actions that are actually available in these states.
+    #
+    # Two traps here. First, this grid is keyed by player *total*, which cannot
+    # express a pair, so SPLIT is never a legal play on it. Second, Q-values
+    # start at 0.0 and only move once an action is taken, so an exact 0.0 means
+    # "never learned" rather than "worth zero". Hard totals are mostly losing
+    # hands with negative Q, so an untouched 0.0 beats every legitimate action
+    # in a plain idxmax — which is why an unmasked version of this chart
+    # recommended splitting a hard 13 and surrendering a hard 4.
+    always_legal = [c for c in ("Q_HIT", "Q_STAND") if c in hard.columns]
+    # Legal only on the first two cards; trust them only where actually visited.
+    conditional = [c for c in ("Q_DOUBLE", "Q_SURRENDER") if c in hard.columns]
+
+    eligible = hard[always_legal + conditional].copy()
+    for col in conditional:
+        eligible.loc[eligible[col] == 0.0, col] = np.nan
+
+    hard["best_q"] = eligible.max(axis=1)
+    hard["best_action"] = eligible.idxmax(axis=1).str.replace("Q_", "", regex=False)
 
     # Grid axes
     player_totals = list(range(4, 22))   # rows 4-21
@@ -222,7 +251,7 @@ def plot_q_heatmap(qtable_path: str, output_dir: str) -> None:
     ax.set_ylabel("Player Total", fontsize=12)
     ax.set_title(
         "Q-Value Heatmap — Best Action Value per State (Hard Totals)\n"
-        "H=Hit  S=Stand  D=Double  R=Surrender  (uppercase = match basic strategy is implicit)",
+        "H=Hit  S=Stand  D=Double  R=Surrender  ·  pairs/splits not shown on a totals grid",
         fontsize=12, fontweight="bold",
     )
 

@@ -278,6 +278,7 @@ void Trainer::evaluate() {
   currentMetrics_.pushRate = result.pushRate;
   currentMetrics_.avgReward = result.avgReward;
   currentMetrics_.bustRate = result.bustRate;
+  currentMetrics_.strategyAccuracy = result.strategyAccuracy;
 
   // Get exploration metrics via agent interface
   currentMetrics_.currentEpsilon = agent_->getExplorationRate();
@@ -396,12 +397,14 @@ void writeSuggestions(const ConvergenceResult &cr, const TrainingMetrics &m,
 void Trainer::runAndSaveReport(const TrainingMetrics &finalMetrics) {
   // Compute convergence once; reuse for both terminal output and file report.
   ConvergenceReport convergenceReport;
-  ConvergenceResult cr = convergenceReport.analyze(*agent_, evaluator_->getBasicStrategy());
+  ConvergenceResult cr = convergenceReport.analyze(
+      *agent_, evaluator_->getBasicStrategy(), config_.gameRules.surrender);
 
   // ----- Terminal output (colored strategy chart + convergence) -----
   if (config_.verbose) {
     StrategyChart chart;
-    chart.print(*agent_, evaluator_->getBasicStrategy(), std::cout);
+    chart.print(*agent_, evaluator_->getBasicStrategy(), std::cout,
+                /*forceNoColor=*/false, config_.gameRules.surrender);
     convergenceReport.print(cr, std::cout);
     writeSuggestions(cr, finalMetrics, std::cout);
   }
@@ -472,7 +475,8 @@ void Trainer::runAndSaveReport(const TrainingMetrics &finalMetrics) {
 
   // 4. Strategy chart (plain text — uppercase=correct, lowercase=diverges)
   StrategyChart chart;
-  chart.print(*agent_, evaluator_->getBasicStrategy(), oss, /*forceNoColor=*/true);
+  chart.print(*agent_, evaluator_->getBasicStrategy(), oss, /*forceNoColor=*/true,
+              config_.gameRules.surrender);
 
   // 5 & 6. Convergence report (includes top-N divergences table)
   convergenceReport.print(cr, oss);

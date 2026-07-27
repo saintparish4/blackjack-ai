@@ -47,7 +47,7 @@ Logger::~Logger() {
 
 void Logger::writeHeader() {
   logFile_ << "episode,elapsed_sec,win_rate,loss_rate,push_rate,"
-           << "avg_reward,bust_rate,epsilon,states_learned\n";
+           << "avg_reward,bust_rate,epsilon,states_learned,strategy_accuracy\n";
   logFile_.flush();
 }
 
@@ -61,7 +61,7 @@ void Logger::log(const TrainingMetrics &metrics) {
            << std::setprecision(6) << metrics.winRate << "," << metrics.lossRate
            << "," << metrics.pushRate << "," << metrics.avgReward << ","
            << metrics.bustRate << "," << metrics.currentEpsilon << ","
-           << metrics.statesLearned << "\n";
+           << metrics.statesLearned << "," << metrics.strategyAccuracy << "\n";
 
   logFile_.flush();
 }

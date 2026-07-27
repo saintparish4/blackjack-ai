@@ -90,10 +90,14 @@ struct TrainingMetrics {
   double bustRate;
   double currentEpsilon;
   size_t statesLearned;
+  /// Agreement with basic strategy (0-1). Win rate saturates within the first
+  /// few evaluations, so this is the metric that actually tracks convergence.
+  double strategyAccuracy;
 
   TrainingMetrics()
       : totalEpisodes(0), avgReward(0.0), winRate(0.0), lossRate(0.0),
-        pushRate(0.0), bustRate(0.0), currentEpsilon(0.0), statesLearned(0) {}
+        pushRate(0.0), bustRate(0.0), currentEpsilon(0.0), statesLearned(0),
+        strategyAccuracy(0.0) {}
 };
 
 /**
