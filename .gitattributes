@@ -1,0 +1,22 @@
+# Normalize line endings: text files are stored LF in the repository and
+# checked out with the platform's native convention.
+* text=auto
+
+# Source
+*.cpp   text diff=cpp
+*.hpp   text diff=cpp
+*.py    text diff=python
+*.md    text diff=markdown
+*.yml   text
+*.yaml  text
+*.cfg   text
+*.txt   text
+*.json  text
+
+# Binary assets — never normalize, never diff as text
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.gif     binary
+*.svg     binary
+*.qtable  binary
