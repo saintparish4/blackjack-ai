@@ -126,18 +126,31 @@ TEST_F(BlackjackGameTest, StandCompletesRound) {
 }
 
 TEST_F(BlackjackGameTest, StandPlaysDealerHand) {
-  game.startRound();
-  game.stand();
-  
-  // Dealer should have at least 2 cards (initial deal)
-  Hand dealerHand = game.getDealerHand(false);
-  EXPECT_GE(dealerHand.size(), 2);
-  
-  // Dealer should have played according to rules (hit until 17+)
-  int dealerTotal = dealerHand.getTotal();
-  if (!dealerHand.isBust()) {
-    EXPECT_GE(dealerTotal, 17);
+  // A blackjack off the deal settles the round before the player can act, which
+  // leaves stand() a no-op and the dealer sitting on two cards. Retry until a
+  // round is actually live, otherwise this asserts on a dealer who never drew.
+  bool testedStand = false;
+
+  for (int i = 0; i < 100 && !testedStand; i++) {
+    game.startRound();
+
+    if (!game.isRoundComplete()) {
+      testedStand = true;
+      game.stand();
+
+      // Dealer should have at least 2 cards (initial deal)
+      Hand dealerHand = game.getDealerHand(false);
+      EXPECT_GE(dealerHand.size(), 2);
+
+      // Dealer should have played according to rules (hit until 17+)
+      if (!dealerHand.isBust()) {
+        EXPECT_GE(dealerHand.getTotal(), 17);
+      }
+    }
+    game.reset();
   }
+
+  EXPECT_TRUE(testedStand);
 }
 
 // === Double Down Tests ===
@@ -234,7 +247,13 @@ TEST_F(BlackjackGameTest, PlayerBlackjackCompletesRoundImmediately) {
     if (game.getPlayerHand().isBlackjack()) {
       foundBlackjack = true;
       EXPECT_TRUE(game.isRoundComplete());
-      EXPECT_EQ(game.getOutcome(), Outcome::PLAYER_BLACKJACK);
+      // A dealer blackjack against the player's pushes rather than paying out,
+      // and this loop stops at the first player blackjack it sees — which is a
+      // simultaneous one roughly 1 time in 21.
+      Outcome outcome = game.getOutcome();
+      EXPECT_TRUE(outcome == Outcome::PLAYER_BLACKJACK ||
+                  outcome == Outcome::PUSH)
+          << "unexpected outcome " << static_cast<int>(outcome);
     }
     game.reset();
   }
@@ -263,7 +282,10 @@ TEST_F(BlackjackGameTest, DealerBlackjackCompletesRoundImmediately) {
 TEST_F(BlackjackGameTest, BothBlackjackResultsInPush) {
   bool foundBothBlackjack = false;
 
-  for (int i = 0; i < 2000 && !foundBothBlackjack; i++) {
+  // Both hands drawing a blackjack lands near 0.23% per round, so 2000 rounds
+  // missed it often enough to fail roughly 1 run in 100. 20000 puts the odds of
+  // a spurious failure below one in a billion and still runs in milliseconds.
+  for (int i = 0; i < 20000 && !foundBothBlackjack; i++) {
     game.startRound();
 
     if (game.getPlayerHand().isBlackjack() &&

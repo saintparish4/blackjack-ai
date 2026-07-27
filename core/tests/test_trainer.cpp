@@ -58,10 +58,15 @@ TEST_F(TrainerTest, RunEpisodeReturnsValidStats) {
   Trainer trainer(agent, config);
   EpisodeStats stats = trainer.runEpisode();
 
+  // Counts agent decision steps, not hands, so 0 is valid: a dealt blackjack
+  // settles the round before the agent ever chooses an action.
   EXPECT_GE(stats.handsPlayed, 0);
-  // Reward for an episode is +1.5, +1, 0, or -1
-  EXPECT_GE(stats.reward, -1.0);
-  EXPECT_LE(stats.reward, 1.5);
+  // Episode reward is summed over every hand the round settles, so the bounds
+  // are wider than a single undoubled hand's -1..+1.5: doubling pays 2x, and a
+  // split settles two hands (double-after-split is not allowed, so each of the
+  // two caps at +/-1). Both routes bottom out at -2 and top out at +2.
+  EXPECT_GE(stats.reward, -2.0);
+  EXPECT_LE(stats.reward, 2.0);
 }
 
 TEST_F(TrainerTest, TerminalRewardOnLastExperience) {
