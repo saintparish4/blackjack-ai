@@ -83,6 +83,7 @@ set(TEST_SOURCES
     tests/test_q_learning.cpp
     tests/test_trainer.cpp
     tests/test_evaluator.cpp
+    tests/test_argparser.cpp
 )
 
 add_executable(run_tests ${TEST_SOURCES})

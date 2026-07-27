@@ -71,9 +71,11 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  // Episodes: CLI > config > default
+  // Episodes: CLI > config > default. wasProvided(), not has(): --episodes is
+  // registered with a default, so has() is true even when it is absent from
+  // argv, which would let the built-in default override the config file.
   size_t numEpisodes = static_cast<size_t>(cfg.getInt("episodes", 1'000'000));
-  if (args.has("episodes")) numEpisodes = std::stoul(args.getString("episodes"));
+  if (args.wasProvided("episodes")) numEpisodes = std::stoul(args.getString("episodes"));
 
   std::string checkpointLoad;
   if (args.has("checkpoint")) checkpointLoad = args.getString("checkpoint");
@@ -93,9 +95,9 @@ int main(int argc, char *argv[]) {
     agent->load(checkpointLoad);
   }
 
-  // Rules preset: CLI > config > default
+  // Rules preset: CLI > config > default (see the --episodes note above)
   std::string preset = cfg.getString("rules_preset", "vegas-strip");
-  if (args.has("rules")) preset = args.getString("rules");
+  if (args.wasProvided("rules")) preset = args.getString("rules");
   GameRules gameRules = rulesFromPreset(preset);
 
   if (cfg.has("num_decks"))

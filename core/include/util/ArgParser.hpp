@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <set>
 #include <iostream>
 #include <stdexcept>
 
@@ -66,6 +67,7 @@ public:
         }
         values_[key] = argv[++i];
       }
+      provided_.insert(key);
     }
 
     if (has("help")) {
@@ -83,8 +85,16 @@ public:
     return true;
   }
 
+  /// True if a value exists, whether it came from argv or from addFlag's
+  /// default. Use wasProvided() to implement "CLI overrides config" — a flag
+  /// registered with a default always satisfies has().
   bool has(const std::string& longName) const {
     return values_.find(longName) != values_.end();
+  }
+
+  /// True only if the flag was explicitly passed on the command line.
+  bool wasProvided(const std::string& longName) const {
+    return provided_.find(longName) != provided_.end();
   }
 
   std::string getString(const std::string& longName) const {
@@ -143,6 +153,7 @@ private:
   std::vector<FlagDef> flagDefs_;
   std::map<std::string, std::string> values_;
   std::map<std::string, std::string> shortToLong_;
+  std::set<std::string> provided_; ///< Flags seen in argv, excluding defaults
 };
 
 } // namespace util
