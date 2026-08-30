@@ -16,15 +16,26 @@ struct Divergence {
     ai::Action  optimalAction; ///< What basic strategy prescribes
     double      qMargin;       ///< Q-value gap between best and second-best valid action
     bool        isCritical;    ///< High-frequency / high-stakes state
+    HandContext context = HandContext::TwoCard; ///< Which policy this came from
 };
 
 /** Output from a full convergence analysis. */
 struct ConvergenceResult {
-    double               accuracy       = 0.0;   ///< Fraction of states matching basic strategy (0-1)
+    double               accuracy       = 0.0;   ///< Fraction of scored states matching basic strategy (0-1)
     bool                 passed         = false;  ///< accuracy >= passing threshold
-    size_t               totalStates    = 0;
+    size_t               totalStates    = 0;      ///< States actually scored
     size_t               matchingStates = 0;
     std::vector<Divergence> divergences;          ///< All divergent states, sorted by qMargin desc
+
+    /// Per-context breakdown. The opening-hand and already-hit policies live in
+    /// separate Q-table slots and converge at different rates, so a single
+    /// blended accuracy hides which one is actually failing.
+    ContextAudit twoCard;
+    ContextAudit multiCard;
+
+    /// States skipped because some legal action there never received a learning
+    /// update. Their argmax reflects Q-table initialisation, not a policy.
+    size_t untrainedStates = 0;
 };
 
 /**
@@ -79,9 +90,8 @@ private:
                                  const ai::State& state,
                                  const std::vector<ai::Action>& validActions);
 
-    /** Build the valid action set for a state, matching compareWithBasicStrategy logic. */
-    static std::vector<ai::Action> validActionsForState(const ai::State& state,
-                                                        bool allowSurrender = true);
+    /** Report label for a hand context. */
+    static const char* contextName(HandContext context);
 };
 
 } // namespace training

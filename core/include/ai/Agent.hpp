@@ -60,6 +60,14 @@ public:
 
   virtual double getExplorationRate() const { return 0.0; }
   virtual size_t getStateCount() const { return 0; }
+
+  /** How many learning updates this (state, action) pair has received.
+   *
+   *  Lets a policy audit tell "the agent evaluated this action and disliked it"
+   *  apart from "this action was never legal here, so its Q is still the
+   *  initial default". Defaults to 1 so fixed-policy agents, which have nothing
+   *  to learn, are never reported as untrained. */
+  virtual uint32_t getVisitCount(const State &, Action) const { return 1; }
 };
 } // namespace ai
 } // namespace blackjack

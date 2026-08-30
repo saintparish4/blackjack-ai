@@ -1,6 +1,7 @@
 #include "ai/QLearningAgent.hpp"
 #include "training/Evaluator.hpp"
 #include <gtest/gtest.h>
+#include <algorithm>
 
 using namespace blackjack;
 using namespace blackjack::ai;
@@ -122,25 +123,98 @@ TEST_F(EvaluatorTest, SurrenderIsNotOfferedWhenRulesDisallowIt) {
             Action::SURRENDER);
 }
 
-TEST_F(EvaluatorTest, SurrenderRulesChangeMeasuredAccuracy) {
+TEST_F(EvaluatorTest, SurrenderRulesChangeTheOfferedActionSet) {
+  GameRules withSurrender = GameRules::atlanticCity();
+  GameRules withoutSurrender = GameRules::vegasStrip();
+  ASSERT_TRUE(withSurrender.surrender);
+  ASSERT_FALSE(withoutSurrender.surrender);
+
+  State twoCard(16, 10, false, /*canSplit=*/false, /*canDouble=*/true);
+
+  auto offered = legalActionsFor(twoCard, withSurrender);
+  auto notOffered = legalActionsFor(twoCard, withoutSurrender);
+
+  // Under rules that do not offer surrender the action is never trained, so
+  // its Q stays at the 0.0 default and would beat every real (negative) action
+  // on a hand this bad. It must not be in the action set at all.
+  EXPECT_NE(std::find(offered.begin(), offered.end(), Action::SURRENDER),
+            offered.end());
+  EXPECT_EQ(std::find(notOffered.begin(), notOffered.end(), Action::SURRENDER),
+            notOffered.end());
+}
+
+TEST_F(EvaluatorTest, UntrainedAgentIsReportedAsUnscoredNotAsAccurate) {
   QLearningAgent::Hyperparameters params;
   params.epsilon = 0.0;
   params.epsilonMin = 0.0;
   QLearningAgent untrained(params);
 
-  Evaluator withSurrender(GameRules::atlanticCity());
-  Evaluator withoutSurrender(GameRules::vegasStrip());
-  ASSERT_TRUE(GameRules::atlanticCity().surrender);
-  ASSERT_FALSE(GameRules::vegasStrip().surrender);
+  PolicyAudit audit = evaluator.auditPolicy(&untrained);
 
-  double lenient = withSurrender.compareWithBasicStrategy(&untrained);
-  double strict = withoutSurrender.compareWithBasicStrategy(&untrained);
+  // Every Q-value is still the 0.0 default, so any argmax just reports action
+  // enum order. Scoring that would manufacture an accuracy number out of
+  // nothing, which is how a never-trained DOUBLE used to pass as a decision.
+  EXPECT_EQ(audit.twoCard.scored, 0u);
+  EXPECT_EQ(audit.multiCard.scored, 0u);
+  EXPECT_GT(audit.twoCard.untrained, 0u);
+  EXPECT_GT(audit.multiCard.untrained, 0u);
+  EXPECT_DOUBLE_EQ(audit.accuracy, 0.0);
+}
 
-  // Both are legitimate measurements, but they must not be the same number:
-  // the surrender ruleset grades against a different book on four states.
-  EXPECT_NE(lenient, strict);
-  EXPECT_GE(lenient, 0.0);
-  EXPECT_LE(strict, 1.0);
+TEST_F(EvaluatorTest, AuditCoversTwoCardAndMultiCardPoliciesSeparately) {
+  GameRules rules = GameRules::vegasStrip();
+
+  auto twoCard = buildAuditStates(rules, HandContext::TwoCard);
+  auto multiCard = buildAuditStates(rules, HandContext::MultiCard);
+
+  ASSERT_FALSE(twoCard.empty());
+  ASSERT_EQ(twoCard.size(), multiCard.size());
+
+  for (size_t i = 0; i < twoCard.size(); ++i) {
+    // canDouble is packed into State::hash(), so the two contexts address
+    // different Q-table slots. Auditing one says nothing about the other.
+    EXPECT_TRUE(twoCard[i].state.canDouble);
+    EXPECT_FALSE(multiCard[i].state.canDouble);
+    EXPECT_NE(twoCard[i].state.hash(), multiCard[i].state.hash());
+  }
+}
+
+TEST_F(EvaluatorTest, DoubleIsOfferedOnEveryTwoCardTotal) {
+  GameRules rules = GameRules::vegasStrip();
+
+  // BlackjackGame::canDoubleDown() allows any two-card hand. An audit that
+  // offers DOUBLE only on 9-11 never scores the agent on doubling a 16.
+  for (const AuditState &entry : buildAuditStates(rules, HandContext::TwoCard)) {
+    EXPECT_NE(std::find(entry.validActions.begin(), entry.validActions.end(),
+                        Action::DOUBLE),
+              entry.validActions.end())
+        << "total=" << entry.state.playerTotal
+        << " soft=" << entry.state.hasUsableAce;
+  }
+
+  // ...and never on a hand that has already hit.
+  for (const AuditState &entry : buildAuditStates(rules, HandContext::MultiCard)) {
+    EXPECT_EQ(std::find(entry.validActions.begin(), entry.validActions.end(),
+                        Action::DOUBLE),
+              entry.validActions.end());
+  }
+}
+
+TEST_F(EvaluatorTest, BasicStrategyBaselineOutperformsRandomPlay) {
+  Evaluator eval(GameRules::vegasStrip());
+  BasicStrategyAgent book(/*allowSurrender=*/false);
+  RandomAgent chaos(/*seed=*/7);
+
+  auto bookResult = eval.evaluate(&book, 20000, false);
+  auto randomResult = eval.evaluate(&chaos, 20000, false);
+
+  // The point of the baseline is to anchor the scale. Book play loses a little;
+  // random play loses a lot. If this ever inverts, the reward accounting or the
+  // strategy table is wrong.
+  EXPECT_GT(bookResult.avgReward, randomResult.avgReward);
+  EXPECT_GT(bookResult.avgReward, -0.10);
+  EXPECT_LT(randomResult.avgReward, -0.20);
+  EXPECT_GT(bookResult.rewardStdErr, 0.0);
 }
 
 TEST_F(EvaluatorTest, BustCountSubsetOfLosses) {
@@ -184,11 +258,21 @@ TEST_F(EvaluatorTest, BasicStrategyStandOnSoft18VsDealer7) {
   EXPECT_EQ(bs.getAction(State(18, 7, true)), Action::STAND);
 }
 
-TEST_F(EvaluatorTest, BasicStrategyDoubleSubstitutableByHit) {
+TEST_F(EvaluatorTest, DoubleSubstitutableByHitOnlyWhenDoublingIsImpossible) {
   const BasicStrategy &bs = evaluator.getBasicStrategy();
-  // Basic strategy may say DOUBLE on 11; HIT should be accepted as correct
-  State s(11, 6, false);
-  EXPECT_TRUE(bs.isCorrectAction(s, Action::HIT));
+
+  // A hand that has already hit cannot double, so HIT is the correct play
+  // wherever the book says DOUBLE.
+  State multiCard(11, 6, false, /*canSplit=*/false, /*canDouble=*/false);
+  EXPECT_EQ(bs.getAction(multiCard), Action::DOUBLE);
+  EXPECT_TRUE(bs.isCorrectAction(multiCard, Action::HIT));
+
+  // On an opening hand it is simply the wrong play. Accepting it here is what
+  // let an agent that never learned to double 11 still score as correct.
+  State twoCard(11, 6, false, /*canSplit=*/false, /*canDouble=*/true);
+  EXPECT_EQ(bs.getAction(twoCard), Action::DOUBLE);
+  EXPECT_FALSE(bs.isCorrectAction(twoCard, Action::HIT));
+  EXPECT_TRUE(bs.isCorrectAction(twoCard, Action::DOUBLE));
 }
 
 // === compareWithBasicStrategy ===

@@ -58,18 +58,12 @@ StrategyChart::computeMargin(ai::Agent &agent, const ai::State &state,
 std::vector<ai::Action>
 StrategyChart::validActionsForState(const ai::State &state,
                                     bool allowSurrender) {
-  // Mirror ConvergenceReport::validActionsForState
-  std::vector<ai::Action> valid = {ai::Action::HIT, ai::Action::STAND};
-  if (state.playerTotal >= 9 && state.playerTotal <= 11) {
-    valid.push_back(ai::Action::DOUBLE);
-  }
-  int d = (state.dealerUpCard == 1) ? 11 : state.dealerUpCard;
-  if (allowSurrender && !state.hasUsableAce &&
-      ((state.playerTotal == 15 && d == 10) ||
-       (state.playerTotal == 16 && (d == 9 || d == 10 || d == 11)))) {
-    valid.push_back(ai::Action::SURRENDER);
-  }
-  return valid;
+  // Single source of truth: see legalActionsFor in Evaluator.cpp. This used to
+  // be a hand-maintained copy and drifted out of sync with both the audit and
+  // the game engine.
+  GameRules rules;
+  rules.surrender = allowSurrender;
+  return legalActionsFor(state, rules);
 }
 
 void StrategyChart::print(ai::Agent &agent, const BasicStrategy &basicStrategy,
@@ -87,7 +81,7 @@ void StrategyChart::print(ai::Agent &agent, const BasicStrategy &basicStrategy,
     out << "Legend: UPPER=matches basic strategy  lower=diverges\n"
         << "  margin<" << marginThreshold_ << " treated as uncertain\n";
   }
-  out << "Actions: H=Hit S=Stand D=Double P=Split R=Surrender\n";
+  out << "Actions: H=Hit S=Stand D=Double P=Split R=Surrender  .=never trained\n";
 
   if (useColor) {
     out << "\n" << BOLD << "--- Hard Totals ---" << RESET << "\n";
@@ -130,9 +124,28 @@ void StrategyChart::printGrid(ai::Agent &agent,
     out << std::setw(5) << playerTotal << " ";
     for (int i = 0; i < 10; ++i) {
       int dealerCard = dealerCards[i];
-      ai::State state(playerTotal, dealerCard, softTotals);
+      // A strategy chart describes the opening hand, where doubling is legal.
+      // Rendering the canDouble=false slot shows the already-hit policy, in
+      // which DOUBLE is untrainable and every double cell reads as a hit.
+      ai::State state(playerTotal, dealerCard, softTotals, /*canSplit=*/false,
+                      /*canDouble=*/true);
 
       std::vector<ai::Action> valid = validActionsForState(state, allowSurrender);
+
+      bool trained = true;
+      for (ai::Action action : valid) {
+        if (agent.getVisitCount(state, action) == 0) {
+          trained = false;
+          break;
+        }
+      }
+      if (!trained) {
+        // Never learned here: any argmax would just report Q-table
+        // initialisation order.
+        out << "  " << '.';
+        continue;
+      }
+
       ai::Action agentAction = agent.chooseAction(state, valid, false);
       bool matches = basicStrategy.isCorrectAction(state, agentAction, allowSurrender);
       double margin = computeMargin(agent, state, valid);

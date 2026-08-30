@@ -400,6 +400,26 @@ void Trainer::runAndSaveReport(const TrainingMetrics &finalMetrics) {
   ConvergenceResult cr = convergenceReport.analyze(
       *agent_, evaluator_->getBasicStrategy(), config_.gameRules.surrender);
 
+  // Baselines on the same engine, rules and evaluator as the agent. Cell-match
+  // accuracy over-weights states that barely occur; EV is what the game
+  // actually pays out on, and it is only interpretable next to a reference.
+  //
+  // The agent is re-evaluated here over the same number of rounds as the
+  // baselines. Reusing the training-loop figure would compare a few thousand
+  // rounds against two hundred thousand: per-round reward has a standard
+  // deviation near 1.15, so a 2,000-round mean carries a +/-0.05 error bar and
+  // can land anywhere from "twice as bad as random-ish" to "better than the
+  // book" on noise alone.
+  const size_t baselineGames = 200000;
+  BasicStrategyAgent bookAgent(config_.gameRules.surrender);
+  RandomAgent randomAgent(/*seed=*/1234);
+  EvaluationResult agentResult =
+      evaluator_->evaluate(agent_.get(), baselineGames, /*compareStrategy=*/false);
+  EvaluationResult bookResult =
+      evaluator_->evaluate(&bookAgent, baselineGames, /*compareStrategy=*/false);
+  EvaluationResult randomResult =
+      evaluator_->evaluate(&randomAgent, baselineGames, /*compareStrategy=*/false);
+
   // ----- Terminal output (colored strategy chart + convergence) -----
   if (config_.verbose) {
     StrategyChart chart;
@@ -472,6 +492,29 @@ void Trainer::runAndSaveReport(const TrainingMetrics &finalMetrics) {
   oss << std::setw(24) << "Bust rate" << ": " << (finalMetrics.bustRate * 100) << "%\n";
   oss << std::setw(24) << "Avg reward"<< ": " << std::setprecision(4)
       << finalMetrics.avgReward << "\n";
+
+  // 3b. EV against baselines measured on the same engine and rules.
+  oss << "\n--- Expected Value (per round, " << baselineGames
+      << " rounds per baseline) ---\n";
+  oss << std::fixed << std::setprecision(4);
+  oss << std::setw(24) << "Agent" << ": " << agentResult.avgReward
+      << " +/- " << (1.96 * agentResult.rewardStdErr) << " (95% CI)\n";
+  oss << std::setw(24) << "Basic strategy" << ": " << bookResult.avgReward
+      << " +/- " << (1.96 * bookResult.rewardStdErr) << " (95% CI)\n";
+  oss << std::setw(24) << "Random play" << ": " << randomResult.avgReward
+      << " +/- " << (1.96 * randomResult.rewardStdErr) << " (95% CI)\n";
+
+  const double spread = bookResult.avgReward - randomResult.avgReward;
+  if (spread > 1e-9) {
+    // 0% = plays like random, 100% = plays like the book. A cell-match score
+    // cannot express this, because most of the cells it counts almost never
+    // come up in a real shoe.
+    const double recovered =
+        (agentResult.avgReward - randomResult.avgReward) / spread;
+    oss << std::setw(24) << "EV gap recovered" << ": "
+        << std::setprecision(1) << (recovered * 100)
+        << "% of the random-to-book range\n";
+  }
 
   // 4. Strategy chart (plain text — uppercase=correct, lowercase=diverges)
   StrategyChart chart;

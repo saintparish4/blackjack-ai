@@ -172,14 +172,32 @@ int main(int argc, char *argv[]) {
   std::cout << "  Final epsilon:  " << finalMetrics.currentEpsilon << "\n\n";
 
   // --- Save final model ---
-  std::string finalPath = "./models/final_agent";
-  agent->save(finalPath);
-  std::cout << "Final model saved to: " << finalPath << "\n";
+  // Training has already completed at this point, so a write failure must be
+  // reported and survived rather than thrown out of main(): letting it
+  // terminate() discards the entire run.
+  int exitCode = 0;
 
-  agent->exportQTable("./analysis/q_table.csv");
-  std::cout << "Q-table exported to:  ./analysis/q_table.csv\n";
+  const std::string finalPath = "./models/final_agent";
+  try {
+    agent->save(finalPath);
+    std::cout << "Final model saved to: " << finalPath << "\n";
+  } catch (const std::exception &e) {
+    std::cerr << "ERROR: could not save model to " << finalPath << ": "
+              << e.what() << "\n";
+    exitCode = 1;
+  }
+
+  const std::string qTablePath = "./analysis/q_table.csv";
+  try {
+    agent->exportQTable(qTablePath);
+    std::cout << "Q-table exported to:  " << qTablePath << "\n";
+  } catch (const std::exception &e) {
+    std::cerr << "ERROR: could not export Q-table to " << qTablePath << ": "
+              << e.what() << "\n";
+    exitCode = 1;
+  }
 
   std::cout << "\nTraining complete. Check logs/ directory for detailed metrics.\n";
 
-  return 0;
+  return exitCode;
 }

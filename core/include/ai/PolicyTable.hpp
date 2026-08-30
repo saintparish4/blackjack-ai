@@ -4,6 +4,7 @@
 #include "State.hpp"
 #include <array>
 #include <bitset>
+#include <cstdint>
 #include <limits>
 #include <string>
 
@@ -38,9 +39,31 @@ public:
     size_t idx = state.hash();
     if (!visited_[idx]) {
       table_[idx].fill(defaultValue_);
+      visits_[idx].fill(0);
       visited_[idx] = true;
     }
     table_[idx][static_cast<size_t>(action)] = value;
+    if (visits_[idx][static_cast<size_t>(action)] < UINT32_MAX) {
+      ++visits_[idx][static_cast<size_t>(action)];
+    }
+  }
+
+  /** Times set() has been called for this (state, action).
+   *
+   *  Distinguishes "the agent learned this action is worth 0.0" from "the
+   *  agent was never offered this action here, so its Q sits at the default".
+   *  The two are indistinguishable by Q-value alone, and conflating them lets
+   *  an untrained action win a greedy argmax against genuinely negative ones. */
+  uint32_t getVisitCount(const State &state, Action action) const {
+    size_t idx = state.hash();
+    if (!visited_[idx]) {
+      return 0;
+    }
+    return visits_[idx][static_cast<size_t>(action)];
+  }
+
+  bool wasActionTried(const State &state, Action action) const {
+    return getVisitCount(state, action) > 0;
   }
 
   /** Order: HIT, STAND, DOUBLE, SPLIT, SURRENDER. Unvisited state returns all default. */
@@ -86,18 +109,24 @@ public:
 
   void clear() {
     visited_.reset();
-    // table_ entries are re-initialized lazily in set() after a clear
+    // table_ and visits_ entries are re-initialized lazily in set()
   }
 
   void saveToBinary(const std::string &filepath) const;
   void loadFromBinary(const std::string &filepath);
 
   /** CSV columns:
-   * player_total,dealer_card,usable_ace,Q_HIT,Q_STAND,Q_DOUBLE,Q_SPLIT,Q_SURRENDER */
+   * player_total,dealer_card,usable_ace,can_split,can_double,
+   * Q_HIT,Q_STAND,Q_DOUBLE,Q_SPLIT,Q_SURRENDER,N_HIT,N_STAND,N_DOUBLE,N_SPLIT,N_SURRENDER
+   *
+   * can_split/can_double are part of the state key, not decoration: omitting
+   * them collapses distinct Q-table slots onto duplicate rows. */
   void exportToCSV(const std::string &filepath) const;
 
 private:
   std::array<QValues, TABLE_SIZE> table_;
+  using VisitCounts = std::array<uint32_t, NUM_ACTIONS>;
+  std::array<VisitCounts, TABLE_SIZE> visits_{};
   std::bitset<TABLE_SIZE> visited_;
   double defaultValue_;
 

@@ -4,6 +4,8 @@
 #include "ai/State.hpp"
 #include "game/BlackjackGame.hpp"
 #include <filesystem>
+#include <fstream>
+#include <set>
 #include <gtest/gtest.h>
 
 
@@ -356,4 +358,110 @@ TEST_F(QLearningTest, DoubleDownRewardMultiplier) {
       GameStateConverter::outcomeToReward(Outcome::DEALER_WIN, true), -2.0);
   EXPECT_DOUBLE_EQ(
       GameStateConverter::outcomeToReward(Outcome::PUSH, true), 0.0);
+}
+// === Visit tracking ===
+//
+// These lock down the distinction that the policy audit depends on: an action
+// the agent evaluated and disliked versus one it was never offered. Both leave
+// a Q-value; only the first is a decision.
+
+TEST_F(QLearningTest, VisitCountsSeparateUntriedActionsFromDislikedOnes) {
+  PolicyTable table;
+  State s(11, 6, false, /*canSplit=*/false, /*canDouble=*/true);
+
+  EXPECT_EQ(table.getVisitCount(s, Action::HIT), 0u);
+  EXPECT_FALSE(table.wasActionTried(s, Action::DOUBLE));
+
+  table.set(s, Action::HIT, -0.4);
+
+  // HIT was tried and scored badly; DOUBLE was never tried. Both read 0.0 and
+  // -0.4 respectively, but only the visit count tells them apart -- and an
+  // untried DOUBLE at the default 0.0 would win a greedy argmax here.
+  EXPECT_EQ(table.getVisitCount(s, Action::HIT), 1u);
+  EXPECT_TRUE(table.wasActionTried(s, Action::HIT));
+  EXPECT_EQ(table.getVisitCount(s, Action::DOUBLE), 0u);
+  EXPECT_FALSE(table.wasActionTried(s, Action::DOUBLE));
+  EXPECT_DOUBLE_EQ(table.get(s, Action::DOUBLE), 0.0);
+}
+
+TEST_F(QLearningTest, VisitCountsAccumulateAndSurviveSaveLoad) {
+  const std::string path = "test_visits.qtable";
+
+  PolicyTable table;
+  State s(16, 10, false, /*canSplit=*/false, /*canDouble=*/true);
+  for (int i = 0; i < 5; ++i) {
+    table.set(s, Action::HIT, -0.5);
+  }
+  table.set(s, Action::STAND, -0.6);
+  ASSERT_EQ(table.getVisitCount(s, Action::HIT), 5u);
+
+  table.saveToBinary(path);
+
+  PolicyTable restored;
+  restored.loadFromBinary(path);
+
+  EXPECT_EQ(restored.getVisitCount(s, Action::HIT), 5u);
+  EXPECT_EQ(restored.getVisitCount(s, Action::STAND), 1u);
+  EXPECT_EQ(restored.getVisitCount(s, Action::DOUBLE), 0u);
+  EXPECT_DOUBLE_EQ(restored.get(s, Action::HIT), -0.5);
+
+  std::filesystem::remove(path);
+}
+
+TEST_F(QLearningTest, TwoCardAndMultiCardStatesAreDistinctTableSlots) {
+  PolicyTable table;
+  State twoCard(11, 6, false, /*canSplit=*/false, /*canDouble=*/true);
+  State multiCard(11, 6, false, /*canSplit=*/false, /*canDouble=*/false);
+
+  ASSERT_NE(twoCard.hash(), multiCard.hash());
+
+  table.set(twoCard, Action::DOUBLE, 0.9);
+
+  // Doubling is only ever legal on a two-card hand, so the multi-card slot can
+  // never learn DOUBLE. Reading the policy from that slot -- as the audit,
+  // chart and CSV export all used to -- shows an agent that never doubles.
+  EXPECT_DOUBLE_EQ(table.get(twoCard, Action::DOUBLE), 0.9);
+  EXPECT_DOUBLE_EQ(table.get(multiCard, Action::DOUBLE), 0.0);
+  EXPECT_FALSE(table.wasActionTried(multiCard, Action::DOUBLE));
+}
+
+TEST_F(QLearningTest, CsvExportKeysRowsByFullStateWithoutDuplicates) {
+  const std::string path = "test_export.csv";
+
+  PolicyTable table;
+  State twoCard(11, 6, false, /*canSplit=*/false, /*canDouble=*/true);
+  State multiCard(11, 6, false, /*canSplit=*/false, /*canDouble=*/false);
+  table.set(twoCard, Action::DOUBLE, 0.9);
+  table.set(multiCard, Action::HIT, 0.2);
+
+  table.exportToCSV(path);
+
+  std::ifstream file(path);
+  ASSERT_TRUE(file.is_open());
+
+  std::string header;
+  std::getline(file, header);
+  EXPECT_NE(header.find("can_double"), std::string::npos);
+  EXPECT_NE(header.find("N_DOUBLE"), std::string::npos);
+
+  // Both rows describe player 11 vs 6, so omitting canSplit/canDouble from the
+  // key emitted two rows that looked identical and held different policies.
+  std::set<std::string> keys;
+  std::string line;
+  size_t rows = 0;
+  while (std::getline(file, line)) {
+    if (line.empty()) continue;
+    ++rows;
+    size_t fifthComma = 0;
+    for (int i = 0; i < 5; ++i) {
+      fifthComma = line.find(',', fifthComma + (i == 0 ? 0 : 1));
+    }
+    keys.insert(line.substr(0, fifthComma));
+  }
+
+  EXPECT_EQ(rows, 2u);
+  EXPECT_EQ(keys.size(), rows) << "state key does not uniquely identify a row";
+
+  file.close();
+  std::filesystem::remove(path);
 }

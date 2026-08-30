@@ -23,31 +23,54 @@ ConvergenceResult ConvergenceReport::analyze(ai::Agent& agent,
                                              bool allowSurrender) const {
     ConvergenceResult result;
 
-    for (int playerTotal = 4; playerTotal <= 21; ++playerTotal) {
-        for (int dealerCard = 1; dealerCard <= 10; ++dealerCard) {
-            for (bool soft : {false, true}) {
-                ai::State state(playerTotal, dealerCard, soft);
-                if (!state.isValid()) continue;
+    // buildAuditStates only reads GameRules::surrender; the rest of the rules
+    // do not change which states or actions the audit enumerates.
+    GameRules rules;
+    rules.surrender = allowSurrender;
 
-                std::vector<ai::Action> valid = validActionsForState(state, allowSurrender);
-                ++result.totalStates;
+    for (HandContext context : {HandContext::TwoCard, HandContext::MultiCard}) {
+        ContextAudit& slot = (context == HandContext::TwoCard) ? result.twoCard
+                                                               : result.multiCard;
 
-                ai::Action agentAction = agent.chooseAction(state, valid, false);
-
-                if (basicStrategy.isCorrectAction(state, agentAction, allowSurrender)) {
-                    ++result.matchingStates;
-                } else {
-                    Divergence div;
-                    div.state         = state;
-                    div.agentAction   = agentAction;
-                    div.optimalAction = basicStrategy.getAction(state, allowSurrender);
-                    div.qMargin       = computeQMargin(agent, state, valid);
-                    div.isCritical    = isCriticalState(state);
-                    result.divergences.push_back(div);
+        for (const AuditState& entry : buildAuditStates(rules, context)) {
+            // Skip states where some legal action was never trained: its Q is
+            // still the initial 0.0, which beats every genuinely negative
+            // alternative, so the argmax is an initialisation artefact rather
+            // than a learned decision.
+            bool trained = true;
+            for (ai::Action action : entry.validActions) {
+                if (agent.getVisitCount(entry.state, action) == 0) {
+                    trained = false;
+                    break;
                 }
+            }
+            if (!trained) {
+                ++slot.untrained;
+                continue;
+            }
+
+            ++slot.scored;
+            ai::Action agentAction =
+                agent.chooseAction(entry.state, entry.validActions, false);
+
+            if (basicStrategy.isCorrectAction(entry.state, agentAction, allowSurrender)) {
+                ++slot.matches;
+            } else {
+                Divergence div;
+                div.state         = entry.state;
+                div.agentAction   = agentAction;
+                div.optimalAction = basicStrategy.getAction(entry.state, allowSurrender);
+                div.qMargin       = computeQMargin(agent, entry.state, entry.validActions);
+                div.isCritical    = isCriticalState(entry.state);
+                div.context       = context;
+                result.divergences.push_back(div);
             }
         }
     }
+
+    result.totalStates     = result.twoCard.scored + result.multiCard.scored;
+    result.matchingStates  = result.twoCard.matches + result.multiCard.matches;
+    result.untrainedStates = result.twoCard.untrained + result.multiCard.untrained;
 
     result.accuracy = result.totalStates > 0
         ? static_cast<double>(result.matchingStates) / result.totalStates
@@ -71,8 +94,20 @@ void ConvergenceReport::print(const ConvergenceResult& result,
     out << "Strategy accuracy : " << std::fixed << std::setprecision(1)
         << (result.accuracy * 100) << "% ("
         << result.matchingStates << "/" << result.totalStates << " states)\n";
+    out << "  two-card hands  : " << std::setprecision(1)
+        << (result.twoCard.accuracy() * 100) << "% ("
+        << result.twoCard.matches << "/" << result.twoCard.scored
+        << ")  -- doubling and surrender live here\n";
+    out << "  multi-card hands: " << std::setprecision(1)
+        << (result.multiCard.accuracy() * 100) << "% ("
+        << result.multiCard.matches << "/" << result.multiCard.scored
+        << ")  -- hit/stand only\n";
     out << "Threshold         : " << (passingThreshold_ * 100) << "%\n";
     out << "Status            : " << (result.passed ? "PASS ✓" : "FAIL ✗") << "\n";
+    if (result.untrainedStates > 0) {
+        out << "Not scored        : " << result.untrainedStates
+            << " state(s) where some legal action was never trained\n";
+    }
 
     if (result.divergences.empty()) {
         out << "No divergences from basic strategy.\n";
@@ -92,13 +127,13 @@ void ConvergenceReport::print(const ConvergenceResult& result,
     size_t shown = std::min(maxDivergencesShown_, result.divergences.size());
     out << "\nTop " << shown << " divergences (critical first, then by Q-value margin):\n";
     out << std::left
-        << std::setw(20) << "State"
+        << std::setw(26) << "State"
         << std::setw(12) << "Agent"
         << std::setw(12) << "Optimal"
         << std::right << std::setw(10) << "Margin"
         << std::left  << std::setw(10) << "  Type"
         << "\n";
-    out << std::string(64, '-') << "\n";
+    out << std::string(70, '-') << "\n";
 
     for (size_t i = 0; i < shown; ++i) {
         const Divergence& d = result.divergences[i];
@@ -106,9 +141,10 @@ void ConvergenceReport::print(const ConvergenceResult& result,
         std::string dealerStr = (dc == 1) ? "A" : std::to_string(dc);
         std::string stateStr  = (d.state.hasUsableAce ? "soft " : "hard ")
                               + std::to_string(d.state.playerTotal)
-                              + " vs " + dealerStr;
+                              + " vs " + dealerStr
+                              + " [" + contextName(d.context) + "]";
 
-        out << std::left  << std::setw(20) << stateStr
+        out << std::left  << std::setw(26) << stateStr
             << std::setw(12) << ai::actionToString(d.agentAction)
             << std::setw(12) << ai::actionToString(d.optimalAction)
             << std::right << std::fixed << std::setw(9) << std::setprecision(4) << d.qMargin
@@ -125,8 +161,9 @@ void ConvergenceReport::print(const ConvergenceResult& result,
             std::string dealerStr = (dc == 1) ? "A" : std::to_string(dc);
             std::string stateStr  = (d.state.hasUsableAce ? "soft " : "hard ")
                                   + std::to_string(d.state.playerTotal)
-                                  + " vs " + dealerStr;
-            out << "  " << std::left << std::setw(18) << stateStr
+                                  + " vs " + dealerStr
+                                  + " [" + contextName(d.context) + "]";
+            out << "  " << std::left << std::setw(24) << stateStr
                 << " agent=" << std::setw(9) << ai::actionToString(d.agentAction)
                 << " optimal=" << std::setw(9) << ai::actionToString(d.optimalAction)
                 << " margin=" << std::fixed << std::setprecision(4) << d.qMargin
@@ -170,29 +207,8 @@ double ConvergenceReport::computeQMargin(ai::Agent& agent,
     return (top2 == -std::numeric_limits<double>::max()) ? 0.0 : (top1 - top2);
 }
 
-std::vector<ai::Action> ConvergenceReport::validActionsForState(const ai::State& state,
-                                                                bool allowSurrender) {
-    // Mirrors the logic in Evaluator::compareWithBasicStrategy so the two
-    // accuracy numbers are computed from the same state space.
-    std::vector<ai::Action> valid = {ai::Action::HIT, ai::Action::STAND};
-
-    if (state.playerTotal >= 9 && state.playerTotal <= 11) {
-        valid.push_back(ai::Action::DOUBLE);
-    }
-
-    // Surrender-eligible states (hard 15 vs 10, hard 16 vs 9/10/A), and only
-    // under rules that offer surrender. With it disabled the action is never
-    // trained, so its Q-value sits at 0.0 while every real action on these
-    // losing hands is negative — greedy selection then "chooses" surrender and
-    // scores a match it did not learn, inflating accuracy by four states.
-    int d = (state.dealerUpCard == 1) ? 11 : state.dealerUpCard;
-    if (allowSurrender && !state.hasUsableAce &&
-        ((state.playerTotal == 15 && d == 10) ||
-         (state.playerTotal == 16 && (d == 9 || d == 10 || d == 11)))) {
-        valid.push_back(ai::Action::SURRENDER);
-    }
-
-    return valid;
+const char* ConvergenceReport::contextName(HandContext context) {
+    return context == HandContext::TwoCard ? "2card" : "multi";
 }
 
 } // namespace training

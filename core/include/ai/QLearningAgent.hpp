@@ -41,6 +41,10 @@ public:
   double getExplorationRate() const override { return epsilon_; }
   size_t getStateCount() const override { return qTable_.size(); }
 
+  uint32_t getVisitCount(const State &state, Action action) const override {
+    return qTable_.getVisitCount(state, action);
+  }
+
   PolicyTable::QValues getAllQValues(const State &state) const {
     return qTable_.getAll(state);
   }
