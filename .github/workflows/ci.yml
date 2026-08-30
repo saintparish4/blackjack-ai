@@ -40,10 +40,15 @@ jobs:
           path: build/_deps
           key: ${{ runner.os }}-${{ matrix.compiler }}-deps-${{ hashFiles('core/CMakeLists.txt') }}
 
+      # -Werror is opt-in so that cloning the repo on a newer compiler does not
+      # fail on an unrelated warning. CI is where it belongs, so turn it on.
       - name: Configure
-        run: cmake -B build -S core -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=${{ matrix.compiler }}
+        run: >
+          cmake -B build -S core
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_CXX_COMPILER=${{ matrix.compiler }}
+          -DBLACKJACK_WERROR=ON
 
-      # CMakeLists sets -Wall -Wextra -Werror -pedantic, so warnings fail here.
       - name: Build
         run: cmake --build build --parallel
 
@@ -62,3 +67,35 @@ jobs:
       - name: Smoke test strategy report
         working-directory: core
         run: ../build/play --report --model ./models/final_agent
+
+  sanitizers:
+    name: asan+ubsan / ubuntu
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The unit tests exercise pointer-heavy agent dispatch, binary
+      # serialisation and a flat Q-table indexed by a packed hash. -Wall cannot
+      # see an out-of-bounds index into that table; ASan can.
+      - name: Configure
+        run: >
+          cmake -B build -S core
+          -DCMAKE_BUILD_TYPE=Debug
+          -DBLACKJACK_WERROR=ON
+          -DBLACKJACK_SANITIZE=ON
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test under sanitizers
+        env:
+          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Short training run under sanitizers
+        working-directory: core
+        env:
+          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: ../build/train --episodes 5000

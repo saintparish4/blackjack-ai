@@ -82,6 +82,16 @@ core/checkpoints/
 core/logs/
 core/models/
 
+# The binaries write artifacts into whatever directory they are run from, and
+# the README's Python examples put you at the repo root. Note that analysis/
+# also holds tracked sources, so only the generated files are listed.
+/models/
+/checkpoints/
+/logs/
+/plots/
+/analysis/training_report.txt
+/analysis/q_table.csv
+
 # Logs
 *.log
 

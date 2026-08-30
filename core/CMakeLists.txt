@@ -15,10 +15,50 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Threading (used by training library)
 find_package(Threads REQUIRED)
 
+# A plain `cmake -B build` should produce an optimized build rather than the
+# unoptimized default, but without hard-coding flags that override the build
+# type the user actually asked for.
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
+                 Debug Release RelWithDebInfo MinSizeRel)
+endif()
+
+# Warnings-as-errors is right for CI and hostile as a default: a consumer on a
+# newer compiler gets a build failure from a warning that has nothing to do
+# with them. CI turns it on explicitly.
+option(BLACKJACK_WERROR "Treat compiler warnings as errors" OFF)
+
+# -march=native bakes in the build machine's instruction set. It is a real
+# speedup for local training runs and makes the binary crash with SIGILL on any
+# older CPU, so it cannot be on by default in a repo people clone.
+option(BLACKJACK_NATIVE_ARCH "Optimize for the building machine's CPU" OFF)
+
+# Sanitizers, for the CI job that catches what -Wall cannot.
+option(BLACKJACK_SANITIZE "Build with address and UB sanitizers" OFF)
+
 # Compiler flags
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    add_compile_options(-Wall -Wextra -Werror -pedantic)
-    add_compile_options(-O3 -march=native)  # Optimization for release
+    add_compile_options(-Wall -Wextra -pedantic)
+
+    if(BLACKJACK_WERROR)
+        add_compile_options(-Werror)
+    endif()
+
+    # CMAKE_BUILD_TYPE supplies -O3 for Release; setting it here as well would
+    # silently override a Debug build.
+    if(BLACKJACK_NATIVE_ARCH)
+        include(CheckCXXCompilerFlag)
+        check_cxx_compiler_flag(-march=native HAS_MARCH_NATIVE)
+        if(HAS_MARCH_NATIVE)
+            add_compile_options(-march=native)
+        endif()
+    endif()
+
+    if(BLACKJACK_SANITIZE)
+        add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer -g)
+        add_link_options(-fsanitize=address,undefined)
+    endif()
 endif()
 
 # Include directories
@@ -38,7 +78,10 @@ target_compile_features(blackjack_game PUBLIC cxx_std_17)
 
 # MSVC-specific settings
 if(MSVC)
-    target_compile_options(blackjack_game PRIVATE /W4 /WX)
+    target_compile_options(blackjack_game PRIVATE /W4)
+    if(BLACKJACK_WERROR)
+        target_compile_options(blackjack_game PRIVATE /WX)
+    endif()
 endif()
 
 # === AI Library ===
@@ -124,6 +167,9 @@ message(STATUS "=================================")
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "C++ compiler: ${CMAKE_CXX_COMPILER_ID}")
 message(STATUS "C++ standard: ${CMAKE_CXX_STANDARD}")
+message(STATUS "Warnings as errors: ${BLACKJACK_WERROR}")
+message(STATUS "Native arch (-march=native): ${BLACKJACK_NATIVE_ARCH}")
+message(STATUS "Sanitizers: ${BLACKJACK_SANITIZE}")
 message(STATUS "")
 message(STATUS "Targets:")
 message(STATUS "  - blackjack_game (library)")
