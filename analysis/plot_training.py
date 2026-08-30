@@ -13,8 +13,14 @@ CSV columns (training log):
     avg_reward, bust_rate, epsilon, states_learned
 
 CSV columns (Q-table):
-    player_total, dealer_card, usable_ace,
-    Q_HIT, Q_STAND, Q_DOUBLE, Q_SPLIT, Q_SURRENDER
+    player_total, dealer_card, usable_ace, can_split, can_double,
+    Q_HIT, Q_STAND, Q_DOUBLE, Q_SPLIT, Q_SURRENDER,
+    N_HIT, N_STAND, N_DOUBLE, N_SPLIT, N_SURRENDER
+
+can_split/can_double are part of the state key, not decoration: the same
+(total, dealer, usable_ace) triple appears once per hand context. The N_*
+columns count learning updates, which is the only way to tell an action the
+agent disliked from one it was never offered.
 """
 
 import argparse
@@ -199,22 +205,57 @@ def plot_q_heatmap(qtable_path: str, output_dir: str) -> None:
         print("  Skipping Q-heatmap: no hard-total rows in Q-table.")
         return
 
+    # canDouble is part of the Q-table key, so (total, dealer, usable_ace) is
+    # NOT unique: the opening-hand and already-hit policies are separate rows
+    # that look identical here. Without this filter the grid silently kept
+    # whichever row iterrows() happened to visit last -- usually the multi-card
+    # slot, where DOUBLE can never be learned and every double reads as a hit.
+    if "can_double" in hard.columns:
+        hard = hard[hard["can_double"] == 1].copy()
+        if hard.empty:
+            print("  Skipping Q-heatmap: no two-card rows in Q-table.")
+            return
+    else:
+        print("  Warning: Q-table predates the can_double column; the heatmap "
+              "may be blending two different policies.")
+
+    if "can_split" in hard.columns:
+        # A grid keyed by total cannot express a pair, so exclude splittable
+        # states rather than letting them overwrite the non-pair policy.
+        hard = hard[hard["can_split"] == 0].copy()
+
+    dupes = hard.duplicated(subset=["player_total", "dealer_card"]).sum()
+    if dupes:
+        print(f"  Warning: {dupes} duplicate (total, dealer) rows after "
+              "filtering; the heatmap will be arbitrary for those cells.")
+
     # Only argmax over actions that are actually available in these states.
     #
-    # Two traps here. First, this grid is keyed by player *total*, which cannot
-    # express a pair, so SPLIT is never a legal play on it. Second, Q-values
-    # start at 0.0 and only move once an action is taken, so an exact 0.0 means
-    # "never learned" rather than "worth zero". Hard totals are mostly losing
-    # hands with negative Q, so an untouched 0.0 beats every legitimate action
-    # in a plain idxmax — which is why an unmasked version of this chart
-    # recommended splitting a hard 13 and surrendering a hard 4.
+    # This grid is keyed by player *total*, which cannot express a pair, so
+    # SPLIT is never a legal play on it.
     always_legal = [c for c in ("Q_HIT", "Q_STAND") if c in hard.columns]
-    # Legal only on the first two cards; trust them only where actually visited.
     conditional = [c for c in ("Q_DOUBLE", "Q_SURRENDER") if c in hard.columns]
 
     eligible = hard[always_legal + conditional].copy()
-    for col in conditional:
-        eligible.loc[eligible[col] == 0.0, col] = np.nan
+
+    # Mask actions the agent never actually took. A Q-value of 0.0 is ambiguous
+    # -- it means either "learned to be worth zero" or "never tried" -- and hard
+    # totals are mostly losing hands with negative Q, so an untouched 0.0 wins a
+    # plain idxmax. The N_* visit counts resolve it exactly; comparing against
+    # 0.0 was only ever a proxy.
+    for col in always_legal + conditional:
+        count_col = col.replace("Q_", "N_")
+        if count_col in hard.columns:
+            eligible.loc[hard[count_col] == 0, col] = np.nan
+        elif col in conditional:
+            eligible.loc[eligible[col] == 0.0, col] = np.nan
+
+    # Rows where nothing was ever tried carry no policy at all.
+    eligible = eligible.dropna(how="all")
+    hard = hard.loc[eligible.index]
+    if hard.empty:
+        print("  Skipping Q-heatmap: no trained hard-total states in Q-table.")
+        return
 
     hard["best_q"] = eligible.max(axis=1)
     hard["best_action"] = eligible.idxmax(axis=1).str.replace("Q_", "", regex=False)

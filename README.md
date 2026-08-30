@@ -3,16 +3,16 @@
 [![CI](https://github.com/saintparish4/blackjack-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/saintparish4/blackjack-ai/actions/workflows/ci.yml)
 [![C++17](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus&logoColor=white)](https://en.cppreference.com/w/cpp/17)
 [![CMake](https://img.shields.io/badge/build-CMake-064F8C?logo=cmake&logoColor=white)](https://cmake.org/)
-[![Tests](https://img.shields.io/badge/tests-106%20passing-3fb950)](core/tests)
+[![Tests](https://img.shields.io/badge/tests-114%20passing-3fb950)](core/tests)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
 A C++17 Q-learning agent that learns blackjack strategy from scratch through self-play — no rules,
 no lookup tables, no supervision. Starting from an all-zero Q-table, 5 million hands of trial and
-error recover **90.6% of textbook basic strategy**, at roughly 1.25M episodes/second and 6ns per
-decision.
+error recover **92% of the expected-value gap** between random play and textbook basic strategy,
+at roughly 2.9M episodes/second and 3.2ns per decision.
 
-Ships with an interactive play mode, a color-coded strategy chart, an exhaustive post-training
-policy audit, and Python visualisation scripts.
+Ships with an interactive play mode, a colour-coded strategy chart, an exhaustive post-training
+policy audit measured against in-engine baselines, and Python visualisation scripts.
 
 <p align="center">
   <img src="docs/images/strategy_chart.png" alt="Learned strategy chart, colour-coded against basic strategy" width="620">
@@ -31,40 +31,88 @@ policy audit, and Python visualisation scripts.
 Trained with [`config/tuned.cfg`](config/tuned.cfg) on Vegas Strip rules (6 decks, dealer stands
 soft 17, no surrender). Full output: [`docs/training_report.txt`](docs/training_report.txt).
 
+### Expected value — the metric that matters
+
+Every figure below is measured on the same game engine, rules and evaluator, over 200,000 rounds
+each, so the three are directly comparable.
+
+| Policy | EV per round (95% CI) |
+|--------|----------------------|
+| Basic strategy (reference) | **−0.0034** ± 0.0049 |
+| **Learned agent** | **−0.0368** ± 0.0045 |
+| Random legal play | −0.4442 ± 0.0057 |
+
+**EV gap recovered: 92.4%** of the distance from random play to book play.
+
+The agent is genuinely good and genuinely not optimal. Its interval does not overlap basic
+strategy's, so the remaining ~0.033/round gap is real, not noise — it loses roughly ten times more
+per round than correct play does. Blackjack's per-round reward has a standard deviation near 1.15,
+which is why these are reported with intervals rather than as bare means; a 2,000-round measurement
+of the same agent carries a ±0.05 error bar and can look like anything at all.
+
+That basic strategy measures −0.0034 here is a useful check on the engine: the published house edge
+for these rules is around −0.005, and the two agree within the interval.
+
+### Strategy accuracy — and why it reads lower than you might expect
+
 | Metric | Result |
 |--------|--------|
-| **Strategy accuracy vs basic** | **90.6%** (326/360 states) — passes the 90% gate |
-| Win / loss / push | 42.1% / 50.2% / 7.8% |
-| Average reward per round | −0.058 |
-| States explored | 620 of a 4096-slot table |
-| Training throughput | ~1.25M episodes/sec (5M episodes in ~4s) |
-| Decision latency | ~6 ns (156M decisions/sec) |
-| Game simulation | ~3.3M hands/sec |
+| Overall vs basic strategy | 86.2% (448/520 states) |
+| — two-card hands | 81.2% (195/240) — doubling lives here |
+| — multi-card hands | 90.4% (253/280) — hit/stand only |
+| Not scored | 200 states where some legal action was never trained |
+| Win / loss / push | 43.0% / 48.2% / 8.8% |
+| Training throughput | ~2.9M episodes/sec (5M episodes in ~1.7s) |
+| Decision latency | ~3.2 ns (310M decisions/sec) |
+| Game simulation | ~7.8M hands/sec |
+
+The audit scores **two policies, not one**. `State::hash()` packs `canDouble` as a bit, so a hand of
+11 that can double and a hand of 11 that has already hit occupy different Q-table slots and learn
+independently. Scoring only one of them measures half the agent.
+
+States where some legal action never received a single learning update are reported as coverage gaps
+rather than scored. An untried action keeps the Q-table's initial 0.0, which beats every genuinely
+negative alternative, so its argmax reflects initialisation rather than a decision. The 200 unscored
+states are exactly the unreachable ones — soft totals below 13, blackjacks, and pair-only
+compositions — which is a useful self-check on the audit.
 
 <p align="center">
   <img src="docs/images/learning_curve.png" alt="Learning curve: outcome rates and strategy accuracy over 5M episodes" width="850">
 </p>
 
 Win rate is a poor progress signal in blackjack — it saturates near 43% almost immediately, because
-even perfect play loses more hands than it wins. Strategy accuracy is the metric that actually
-tracks learning: it climbs from 81% to ~91% over the run and is what the plot above is really about.
+even perfect play loses more hands than it wins.
 
 <p align="center">
   <img src="docs/images/q_heatmap.png" alt="Q-value heatmap over hard totals" width="720">
 </p>
 
 <p align="center">
-  <em>Best learned Q-value per (player total × dealer upcard). The agent independently rediscovers
-  the shape of basic strategy: hit everything below 12, stand on 17+, and treat 12–16 against a
-  strong upcard as the losing territory it is.</em>
+  <em>Best learned Q-value per (player total × dealer upcard) on the opening hand. The agent
+  independently rediscovers the shape of basic strategy: hit everything below 12, stand on 17+, and
+  treat 12–16 against a strong upcard as the losing territory it is. Rows 4 and 21 are blank because
+  neither is reachable as a two-card non-pair hand.</em>
 </p>
 
 ### Where it still diverges
 
-The 34 remaining divergences cluster almost entirely on **soft 18** and marginal hands like hard 10
-vs an ace — states where the top two Q-values sit within ~0.1 of each other and the sampling noise
-never fully resolves. The convergence report ranks every divergence by that margin so the
-close calls are distinguishable from real errors.
+**The agent has not learned to double.** Basic strategy doubles hard 11 against every dealer upcard;
+the agent hits nearly all of them, and its hard 9 and 10 rows are similarly thin. This is the single
+largest remaining EV leak and the clearest target for the next round of work.
+
+The cause is visible in the Q-values. DOUBLE pays ±2 where HIT and STAND pay ±1, so it is the
+highest-variance action in the space. At α=0.05 with reward only on the terminal step, its estimate
+stays noisy long after the others settle: across a single run, doubling 11 scores +1.06 against a 4
+and −0.31 against a 10, when it is uniformly strong. Those signs are sampling noise, not policy.
+
+The rest of the divergences cluster on **soft 18** and marginal hands where the top two Q-values sit
+within ~0.1 of each other. The convergence report ranks every divergence by that margin, and tags
+each with the context it came from, so close calls are distinguishable from real errors.
+
+Run-to-run variance over five runs: overall accuracy 86.0–87.3%, two-card accuracy 81.7–85.0%, EV
+−0.033 to −0.043, EV gap recovered 91.5–93.1%. The EV metric is noticeably more stable than
+cell-match accuracy, which is a second reason to lead with it — cell-match weights a hard 4 the same
+as a hard 16, and one of those comes up constantly.
 
 ---
 
@@ -73,15 +121,17 @@ close calls are distinguishable from real errors.
 | Category | What's included |
 |----------|----------------|
 | **Game engine** | Full casino blackjack — split (one split per round), double down, late surrender, soft aces, dealer hits soft 17, configurable decks |
-| **Q-learning agent** | ε-greedy exploration with decay, flat `std::array` Q-table (cache-friendly), bit-packed state hash, binary save/load |
+| **Q-learning agent** | ε-greedy exploration with decay, flat `std::array` Q-table (cache-friendly), bit-packed state hash, per-action visit counts, binary save/load |
 | **Training pipeline** | Episode loop, periodic evaluation, early stopping, progress bar, checkpoint saves on SIGINT |
-| **Strategy validation** | Exhaustive convergence report vs basic strategy after every training run |
+| **Strategy validation** | Exhaustive convergence report vs basic strategy, split by hand context, with coverage reporting |
+| **EV baselines** | In-engine basic-strategy and random-play agents; every run reports agent vs book vs random EV with confidence intervals |
 | **Color-coded chart** | Terminal strategy grid — green = correct, red = wrong, yellow = uncertain |
 | **Interactive play** | `./play --mode human|ai|advisor` — play yourself, watch the AI, or get move-by-move advice |
 | **Beginner mode** | Plain-English card explanations, chip balance, AI reasoning in natural language |
 | **INI config file** | All hyperparameters in `config/default.cfg` and `config/tuned.cfg`; CLI flags override config |
 | **Rule presets** | Vegas Strip, Downtown, Atlantic City, European, Single Deck |
 | **Python analysis** | `analysis/plot_training.py` generates 5 plots from training logs |
+| **Build hygiene** | `-Werror`, `-march=native` and sanitizers are opt-in CMake options, so a clone builds portably by default |
 | **Training report** | Full text report saved to `analysis/training_report.txt` after each run |
 
 ---
@@ -103,6 +153,16 @@ cmake --build build
 # Incremental build (after editing code)
 cmake --build build
 ```
+
+Optional CMake flags, all off by default so a fresh clone builds and runs anywhere:
+
+| Option | Effect |
+|--------|--------|
+| `-DBLACKJACK_WERROR=ON` | Treat warnings as errors. CI uses this; it is a poor default for consumers on a newer compiler. |
+| `-DBLACKJACK_NATIVE_ARCH=ON` | Add `-march=native`. Faster local training; the binary then crashes with SIGILL on an older CPU. |
+| `-DBLACKJACK_SANITIZE=ON` | Build with ASan + UBSan. |
+
+`CMAKE_BUILD_TYPE` defaults to `Release` and is respected — a `Debug` build is actually unoptimized.
 
 ### 2 — Train
 
@@ -134,7 +194,7 @@ Training artifacts land in the working directory:
 | Path | Contents |
 |------|----------|
 | `models/final_agent` | Saved Q-table + metadata |
-| `analysis/q_table.csv` | Q-values for every visited state (for Python heatmap) |
+| `analysis/q_table.csv` | Q-values **and per-action visit counts** for every visited state, keyed by the full state including `can_split`/`can_double` |
 | `analysis/training_report.txt` | Full post-training report |
 | `logs/training_YYYYMMDD_HHMMSS.csv` | Per-evaluation metrics (episode, win rate, epsilon, …) |
 | `checkpoints/` | Periodic agent snapshots |
@@ -225,10 +285,10 @@ cd build && ctest --output-on-failure
 ./build/run_tests --gtest_filter="TrainerTest.*"
 ```
 
-106 tests across 6 suites, run on every push against both GCC and Clang (see
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml)). CI also builds with `-Wall -Wextra -Werror
--pedantic` and smoke-tests the full train → evaluate → report → save pipeline, which the unit tests
-only cover in pieces.
+114 tests across 6 suites, run on every push against both GCC and Clang (see
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml)). CI builds with `-Wall -Wextra -Werror
+-pedantic`, runs a separate ASan + UBSan job, and smoke-tests the full train → evaluate → report →
+save pipeline, which the unit tests only cover in pieces.
 
 Tests that sample random deals are sized so a spurious failure is vanishingly unlikely, and they
 account for the cases that make blackjack assertions subtle — a round can settle on the deal before
@@ -289,7 +349,7 @@ blackjack-ai/
 │   │   ├── training/      # Trainer, Evaluator, Logger, ConvergenceReport, StrategyChart
 │   │   └── util/          # ArgParser, ConfigParser, ProgressBar
 │   ├── scripts/           # train.cpp, play.cpp, benchmark.cpp
-│   └── tests/             # 106 unit tests (Google Test)
+│   └── tests/             # 114 unit tests (Google Test)
 ├── analysis/
 │   ├── plot_training.py   # Python visualisation script
 │   └── requirements.txt   # matplotlib, pandas
@@ -311,16 +371,18 @@ Three static libraries are linked together: `blackjack_game` → `blackjack_ai` 
 
 ### Layer 2 — AI
 
-- **`State`** — discrete RL state: `{playerTotal, dealerUpCard, hasUsableAce, canSplit, canDouble}`. Bit-packed via `hash()` for O(1) Q-table lookup.
+- **`State`** — discrete RL state: `{playerTotal, dealerUpCard, hasUsableAce, canSplit, canDouble}`. Bit-packed via `hash()` for O(1) Q-table lookup. Note that `canSplit`/`canDouble` are part of the key: the same total occupies a different slot depending on what is legal there, so the opening-hand and already-hit policies are learned independently.
 - **`Action`** — `HIT`, `STAND`, `DOUBLE`, `SPLIT`, `SURRENDER`.
 - **`QLearningAgent`** — Q(s,a) ← Q + α[R + γ max Q(s′,a′) − Q]; ε-greedy with decay. Flat `std::array<QValues, 4096>` Q-table; binary save/load; CSV export.
+- **`PolicyTable`** — the Q-table itself, plus a per-action visit count. The count is what separates "the agent evaluated this action and disliked it" from "this action was never legal here, so its Q is still 0.0"; both leave a Q-value, only the first is a decision, and treating them alike lets an untrained action win a greedy argmax.
 - **`GameStateConverter`** — converts game state → AI state, enumerates valid actions, executes chosen action.
 
 ### Layer 3 — Training
 
 - **`Trainer`** — episode loop, periodic evaluation, progress bar, early stopping, checkpoint saves. Runs the convergence report and saves `analysis/training_report.txt` at the end of every `train()` call.
-- **`Evaluator`** — exploitation-mode evaluation. `BasicStrategy` reference for accuracy comparison.
-- **`ConvergenceReport`** — exhaustive policy audit: all `(playerTotal 4–21) × (dealerCard 1–10) × (soft/hard)` states, divergences sorted by Q-value margin, critical-state flags.
+- **`Evaluator`** — exploitation-mode evaluation, reward standard error, and the shared `legalActionsFor` / `buildAuditStates` definitions used by every audit and chart.
+- **`BasicStrategyAgent` / `RandomAgent`** — reference policies implementing `ai::Agent`, so they run through the identical evaluator, engine and rules as a learned agent. A baseline computed any other way is not comparable.
+- **`ConvergenceReport`** — exhaustive policy audit over both hand contexts: all `(playerTotal 4–21) × (dealerCard 1–10) × (soft/hard)` states, scored separately for two-card and multi-card hands, divergences sorted by Q-value margin, coverage gaps reported rather than scored.
 - **`StrategyChart`** — colour-coded terminal grid (green / red / yellow per cell).
 - **`Logger`** — writes CSV training logs to disk.
 
@@ -350,12 +412,14 @@ python analysis/plot_training.py core/logs/training_*.csv \
     --qtable core/analysis/q_table.csv --output docs/images/
 ```
 
-`config/default.cfg` converges faster but plateaus near 88%: early stopping keys on win rate, which
+`config/default.cfg` converges faster but plateaus lower: early stopping keys on win rate, which
 flattens long before the policy settles on marginal hands. `config/tuned.cfg` lowers the learning
 rate, holds a floor under epsilon so rare soft totals keep accumulating visits, and raises the
 early-stopping patience accordingly. Both files document every knob inline.
 
-Run-to-run variance on strategy accuracy is roughly ±1% — the agent is seeded non-deterministically.
+The agent is seeded non-deterministically, so numbers move between runs. Across five runs: overall
+accuracy 86.0–87.3%, two-card accuracy 81.7–85.0%, EV −0.033 to −0.043, EV gap recovered
+91.5–93.1%.
 
 ---
 
@@ -375,13 +439,23 @@ Measures game simulation throughput and per-decision Q-lookup latency independen
 
 ## Future Work
 
-- **Hi-Lo card counting** — extend the state space with a running count; train a counting-aware agent
-- **SARSA / Expected SARSA** — add alternative on-policy agents for empirical comparison
-- **Deep Q-Network (DQN)** — neural function approximation for continuous or higher-dimensional state spaces
-- **WebAssembly browser demo** — compile the game engine + a pre-trained model to WASM; run in-browser
-- **Multi-player tables** — extend `BlackjackGame` to track multiple player seats
-- **SIMD-optimized parallel evaluation** — vectorised hand simulation for faster batch training
-- **Card counting integration test** — measure actual EV gain from counting vs flat-bet baseline
+Ordered by what the measurements above actually justify.
+
+- **Close the double-down gap** — the agent's largest EV leak. DOUBLE pays ±2 against ±1 for
+  hit/stand, so its estimate stays noise-dominated at a uniform learning rate. Candidates: a
+  visit-count-scaled α (the counts are already tracked), reward normalisation, or optimistic
+  initialisation restricted to legal actions. Success criterion is EV, not cell-match: close the
+  0.033/round gap to basic strategy.
+- **Expected SARSA** — an on-policy comparison run through the same evaluator and baselines. Cheap
+  now that the harness exists, and the expectation over next actions should cut exactly the variance
+  that is hurting DOUBLE.
+- **Hi-Lo card counting** — extend the state space with a running count, then measure the EV gain
+  against the flat-bet baseline. Counting is the one blackjack strategy that beats basic strategy,
+  so this is the natural ceiling-raiser.
+- **Deep Q-Network (DQN)** — neural function approximation, once the tabular case is actually solved.
+- **WebAssembly browser demo** — compile the engine plus a trained model to WASM and play in-browser.
+- **Multi-player tables** — extend `BlackjackGame` to track multiple player seats.
+- **SIMD-optimized parallel evaluation** — vectorised hand simulation for faster batch training.
 
 ---
 
