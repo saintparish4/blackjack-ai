@@ -92,6 +92,27 @@ void TabularAgent::learn(const Experience &experience) {
   stepCount_++;
 }
 
+int TabularAgent::chooseBet(const BetContext &ctx, bool) {
+  if (!params_.learnBets) {
+    return ctx.minBet;
+  }
+  const int bucket = ctx.countBucket != COUNT_UNTRACKED
+                         ? ctx.countBucket
+                         : countBucketFor(ctx.trueCount);
+  const auto b = static_cast<size_t>(bucket);
+  return (betSamples_[b] >= MIN_BET_SAMPLES && betValue_[b] > 0.0) ? ctx.maxBet
+                                                                  : ctx.minBet;
+}
+
+void TabularAgent::learnBet(const BetContext &ctx, double perUnitReward) {
+  const int bucket = ctx.countBucket != COUNT_UNTRACKED
+                         ? ctx.countBucket
+                         : countBucketFor(ctx.trueCount);
+  const auto b = static_cast<size_t>(bucket);
+  ++betSamples_[b];
+  betValue_[b] += (perUnitReward - betValue_[b]) / static_cast<double>(betSamples_[b]);
+}
+
 double TabularAgent::getQValue(const State &state, Action action) const {
   return qTable_.get(state, action);
 }
@@ -122,6 +143,14 @@ void TabularAgent::save(const std::string &filepath) const {
   metaFile << "epsilon_decay: " << params_.epsilonDecay << "\n";
   metaFile << "step_count: " << stepCount_ << "\n";
   metaFile << "state_space_size: " << qTable_.size() << "\n";
+  metaFile << "use_count: " << (params_.useCount ? 1 : 0) << "\n";
+  metaFile << "learn_bets: " << (params_.learnBets ? 1 : 0) << "\n";
+  for (int b = 1; b <= countBucketFor(MAX_TRUE_COUNT); ++b) {
+    const auto i = static_cast<size_t>(b);
+    if (betSamples_[i] == 0) continue;
+    metaFile << "bet_value_" << b << ": " << betValue_[i] << "\n";
+    metaFile << "bet_samples_" << b << ": " << betSamples_[i] << "\n";
+  }
 
   metaFile.close();
 }
@@ -150,6 +179,19 @@ void TabularAgent::load(const std::string &filepath) {
       epsilon_ = std::stod(value);
     } else if (key == "step_count") {
       stepCount_ = std::stoull(value);
+    } else if (key == "use_count") {
+      // A counting model's Q-values are keyed by count; played count-blind it
+      // would find every state untrained.
+      params_.useCount = value == "1";
+    } else if (key == "learn_bets") {
+      params_.learnBets = value == "1";
+    } else if (key.rfind("bet_value_", 0) == 0 || key.rfind("bet_samples_", 0) == 0) {
+      const bool isValue = key[4] == 'v';
+      const size_t b = std::stoul(key.substr(isValue ? 10 : 12));
+      if (b < betValue_.size()) {
+        if (isValue) betValue_[b] = std::stod(value);
+        else betSamples_[b] = std::stoull(value);
+      }
     }
   }
 
@@ -160,6 +202,8 @@ void TabularAgent::reset() {
   qTable_.clear();
   epsilon_ = params_.epsilon;
   stepCount_ = 0;
+  betValue_.fill(0.0);
+  betSamples_.fill(0);
 }
 
 Action TabularAgent::epsilonGreedy(const State &state,

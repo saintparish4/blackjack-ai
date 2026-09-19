@@ -49,6 +49,14 @@ struct Experience {
         validNextActions(std::move(vna)) {}
 };
 
+/** What an agent can see when it sizes a bet: the count before the deal. */
+struct BetContext {
+  double trueCount = 0.0; ///< Hi-Lo true count of the shoe the round comes from
+  int countBucket = COUNT_UNTRACKED; ///< countBucketFor(trueCount)
+  int minBet = 1;         ///< Bets are in units of the table minimum
+  int maxBet = 1;         ///< 1 = flat betting
+};
+
 /** Base interface for learning agents. */
 class Agent {
 public:
@@ -75,6 +83,26 @@ public:
    *  initial default". Defaults to 1 so fixed-policy agents, which have nothing
    *  to learn, are never reported as untrained. */
   virtual uint32_t getVisitCount(const State &, Action) const { return 1; }
+
+  // ---- Card counting (all optional; the defaults are a flat-betting,
+  // ---- count-blind player) ----
+
+  /** True if the agent's decisions depend on the count: the Trainer and
+   *  Evaluator then fill State::countBucket at every decision. */
+  virtual bool usesCount() const { return false; }
+
+  /** Units to wager on the next round, within [ctx.minBet, ctx.maxBet]. */
+  virtual int chooseBet(const BetContext &ctx, bool /*training*/ = false) {
+    return ctx.minBet;
+  }
+
+  /** True if the agent sizes bets from its own estimate of its edge at each
+   *  count, which the Trainer calibrates after training (see learnBet). */
+  virtual bool learnsBets() const { return false; }
+
+  /** One calibration sample: the per-unit result of a greedily played round
+   *  dealt at this count. */
+  virtual void learnBet(const BetContext &, double /*perUnitReward*/) {}
 };
 } // namespace ai
 } // namespace blackjack

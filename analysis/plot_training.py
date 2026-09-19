@@ -13,12 +13,14 @@ CSV columns (training log):
     avg_reward, bust_rate, epsilon, states_learned
 
 CSV columns (Q-table):
-    player_total, dealer_card, usable_ace, can_split, can_double,
+    player_total, dealer_card, usable_ace, can_split, can_double, count_bucket,
     Q_HIT, Q_STAND, Q_DOUBLE, Q_SPLIT, Q_SURRENDER,
     N_HIT, N_STAND, N_DOUBLE, N_SPLIT, N_SURRENDER
 
-can_split/can_double are part of the state key, not decoration: the same
-(total, dealer, usable_ace) triple appears once per hand context. The N_*
+can_split/can_double/count_bucket are part of the state key, not decoration:
+the same (total, dealer, usable_ace) triple appears once per hand context, and
+once per true-count bucket for a card-counting agent (count_bucket 0 means the
+agent doesn't count; older exports have no count_bucket column). The N_*
 columns count learning updates, which is the only way to tell an action the
 agent disliked from one it was never offered.
 """
@@ -47,6 +49,10 @@ ACTION_CHARS: dict[str, str] = {
 }
 
 BASIC_STRATEGY_WIN_RATE = 43.0  # approximate target reference line (%)
+
+# ai::NEUTRAL_COUNT_BUCKET: floor(true count) clamped to [-3, +6] maps to
+# buckets 1..10, so a true count of zero is bucket 4. Bucket 0 = not counting.
+NEUTRAL_COUNT_BUCKET = 4
 
 FIGURE_DPI = 150
 FIGURE_SIZE_WIDE = (11, 5)
@@ -223,6 +229,13 @@ def plot_q_heatmap(qtable_path: str, output_dir: str) -> None:
         # A grid keyed by total cannot express a pair, so exclude splittable
         # states rather than letting them overwrite the non-pair policy.
         hard = hard[hard["can_split"] == 0].copy()
+
+    if "count_bucket" in hard.columns:
+        # A card-counting agent has one policy per true-count bucket. Show the
+        # one at a true count of zero (bucket 4), where basic strategy applies;
+        # a count-blind agent only has bucket 0.
+        bucket = 0 if (hard["count_bucket"] == 0).any() else NEUTRAL_COUNT_BUCKET
+        hard = hard[hard["count_bucket"] == bucket].copy()
 
     dupes = hard.duplicated(subset=["player_total", "dealer_card"]).sum()
     if dupes:

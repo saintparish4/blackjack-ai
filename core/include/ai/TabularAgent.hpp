@@ -2,6 +2,7 @@
 
 #include "Agent.hpp"
 #include "PolicyTable.hpp"
+#include <array>
 #include <cstdint>
 #include <optional>
 #include <random>
@@ -45,6 +46,10 @@ public:
     AlphaSchedule alphaSchedule = AlphaSchedule::CONSTANT;
     double alphaOmega = 0.8; ///< VISIT only; (0.5, 1] satisfies Robbins-Monro
     double alphaMin = 0.0;   ///< VISIT only; floor on the step size
+    /// Put the Hi-Lo true-count bucket in the state, so play can depend on it.
+    bool useCount = false;
+    /// Size bets from the agent's own measured edge at each count.
+    bool learnBets = false;
 
     bool isValid() const {
       return learningRate > 0 && learningRate <= 1 && discountFactor >= 0 &&
@@ -73,6 +78,24 @@ public:
   uint32_t getVisitCount(const State &state, Action action) const override {
     return qTable_.getVisitCount(state, action);
   }
+
+  bool usesCount() const override { return params_.useCount; }
+  bool learnsBets() const override { return params_.learnBets; }
+
+  /** Max bet where the calibrated edge at this count is positive, min bet
+   *  everywhere else (or always, if bet learning is off). For a player who
+   *  only cares about expected value, a bet that's linear in its payoff is
+   *  worth making as large as possible exactly when the edge is positive. */
+  int chooseBet(const BetContext &ctx, bool training = false) override;
+  void learnBet(const BetContext &ctx, double perUnitReward) override;
+
+  /** Calibrated edge per unit bet at a count bucket, and its sample size. */
+  double betValue(int bucket) const { return betValue_.at(static_cast<size_t>(bucket)); }
+  uint64_t betSamples(int bucket) const { return betSamples_.at(static_cast<size_t>(bucket)); }
+
+  /// Fewer samples than this and a bucket keeps the minimum bet: at 1.15 per
+  /// round of noise, a smaller average can't tell a 1% edge from zero.
+  static constexpr uint64_t MIN_BET_SAMPLES = 10'000;
 
   PolicyTable::QValues getAllQValues(const State &state) const {
     return qTable_.getAll(state);
@@ -113,6 +136,8 @@ protected:
   double epsilon_;
   mutable std::mt19937 rng_;
   uint64_t stepCount_;
+  std::array<double, 16> betValue_{};   ///< Mean per-unit result by count bucket
+  std::array<uint64_t, 16> betSamples_{};
 
 private:
   Action epsilonGreedy(const State &state,

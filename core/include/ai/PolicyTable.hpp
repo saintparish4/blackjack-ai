@@ -2,25 +2,32 @@
 
 #include "Agent.hpp"
 #include "State.hpp"
+#include <algorithm>
 #include <array>
-#include <bitset>
 #include <cstdint>
 #include <limits>
 #include <string>
+#include <vector>
 
 namespace blackjack {
 namespace ai {
 
 /** Flat Q-table (state -> action values); state hash is direct array index.
- *  State::hash() fits in 12 bits → 4096 entries max.
+ *  State::hash() fits in 16 bits → 65536 entries. States of agents that don't
+ *  count cards all sit in the first 4096 (count bucket 0), so they touch the
+ *  same memory they did before counting existed.
  *  Unvisited states return defaultValue_. */
 class PolicyTable {
 public:
-  static constexpr size_t TABLE_SIZE = 4096;
+  static constexpr size_t TABLE_SIZE = 65536;
   static constexpr size_t NUM_ACTIONS = 5;  // HIT, STAND, DOUBLE, SPLIT, SURRENDER
   using QValues = std::array<double, NUM_ACTIONS>;
 
-  explicit PolicyTable(double defaultValue = 0.0) : defaultValue_(defaultValue) {
+  // Heap storage: 65536 rows are about 4 MB, which would overflow a stack
+  // (Emscripten's is 64 KB) the moment an agent lived on one.
+  explicit PolicyTable(double defaultValue = 0.0)
+      : table_(TABLE_SIZE), visits_(TABLE_SIZE), visited_(TABLE_SIZE, 0),
+        defaultValue_(defaultValue) {
     for (auto &row : table_) {
       row.fill(defaultValue_);
     }
@@ -40,7 +47,8 @@ public:
     if (!visited_[idx]) {
       table_[idx].fill(defaultValue_);
       visits_[idx].fill(0);
-      visited_[idx] = true;
+      visited_[idx] = 1;
+      ++visitedCount_;
     }
     table_[idx][static_cast<size_t>(action)] = value;
     if (visits_[idx][static_cast<size_t>(action)] < UINT32_MAX) {
@@ -104,11 +112,12 @@ public:
     return maxQ;
   }
 
-  size_t size() const { return visited_.count(); }
-  bool empty() const { return visited_.none(); }
+  size_t size() const { return visitedCount_; }
+  bool empty() const { return visitedCount_ == 0; }
 
   void clear() {
-    visited_.reset();
+    std::fill(visited_.begin(), visited_.end(), 0);
+    visitedCount_ = 0;
     // table_ and visits_ entries are re-initialized lazily in set()
   }
 
@@ -116,19 +125,13 @@ public:
   void loadFromBinary(const std::string &filepath);
 
   /** CSV columns:
-   * player_total,dealer_card,usable_ace,can_split,can_double,
+   * player_total,dealer_card,usable_ace,can_split,can_double,count_bucket,
    * Q_HIT,Q_STAND,Q_DOUBLE,Q_SPLIT,Q_SURRENDER,N_HIT,N_STAND,N_DOUBLE,N_SPLIT,N_SURRENDER
    *
-   * can_split/can_double are part of the state key, not decoration: omitting
-   * them collapses distinct Q-table slots onto duplicate rows. */
+   * can_split/can_double/count_bucket are part of the state key, not
+   * decoration: omitting them collapses distinct Q-table slots onto duplicate
+   * rows. count_bucket is 0 for agents that don't count. */
   void exportToCSV(const std::string &filepath) const;
-
-private:
-  std::array<QValues, TABLE_SIZE> table_;
-  using VisitCounts = std::array<uint32_t, NUM_ACTIONS>;
-  std::array<VisitCounts, TABLE_SIZE> visits_{};
-  std::bitset<TABLE_SIZE> visited_;
-  double defaultValue_;
 
   /** Reconstruct State from its hash index (inverse of State::hash()). */
   static State stateFromHash(size_t h) {
@@ -138,8 +141,17 @@ private:
     s.hasUsableAce  = ((h >> 9) & 1) != 0;
     s.canSplit      = ((h >> 10) & 1) != 0;
     s.canDouble     = ((h >> 11) & 1) != 0;
+    s.countBucket   = static_cast<int>((h >> 12) & 0x0F);
     return s;
   }
+
+private:
+  std::vector<QValues> table_;
+  using VisitCounts = std::array<uint32_t, NUM_ACTIONS>;
+  std::vector<VisitCounts> visits_;
+  std::vector<uint8_t> visited_;
+  size_t visitedCount_ = 0;
+  double defaultValue_;
 };
 } // namespace ai
 } // namespace blackjack

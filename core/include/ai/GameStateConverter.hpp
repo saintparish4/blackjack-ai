@@ -14,8 +14,11 @@ public:
   /** allowSplit/allowDouble: use game.canSplit() and game.canDoubleDown() when
    *  calling from Trainer/Evaluator so split hands get canSplit=false,
    *  canDouble=false (no double-after-split). */
+  /** countBucket: countBucketFor(game.getTrueCount()) for agents that
+   *  usesCount(), COUNT_UNTRACKED for everyone else. */
   static State toAIState(const Hand &playerHand, const Hand &dealerHand,
-                          bool allowSplit = true, bool allowDouble = true) {
+                          bool allowSplit = true, bool allowDouble = true,
+                          int countBucket = COUNT_UNTRACKED) {
     auto playerValue = playerHand.getValue();
 
     const auto &dealerCards = dealerHand.getCards();
@@ -30,8 +33,16 @@ public:
 
     bool canSplit = allowSplit && playerHand.canSplit();
     bool canDouble = allowDouble && (playerHand.size() == 2);
-    return State(playerValue.total, dealerUpCard, playerValue.isSoft, canSplit,
-                 canDouble);
+    State state(playerValue.total, dealerUpCard, playerValue.isSoft, canSplit,
+                canDouble);
+    state.countBucket = countBucket;
+    return state;
+  }
+
+  /** The count bucket an agent should see in this game right now. */
+  static int countBucketFor(const Agent &agent, const BlackjackGame &game) {
+    return agent.usesCount() ? ai::countBucketFor(game.getTrueCount())
+                             : COUNT_UNTRACKED;
   }
 
   static std::vector<Action> getValidActions(const Hand &playerHand,

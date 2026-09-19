@@ -32,9 +32,10 @@ void PolicyTable::saveToBinary(const std::string &filepath) const {
     throw std::runtime_error("Cannot open file for writing: " + filepath);
   }
 
-  // v2 adds per-action visit counts after each Q row. v1 files remain loadable.
-  uint32_t version = 2;
-  uint64_t tableSize = visited_.count();
+  // v2 added per-action visit counts after each Q row; v3 adds the count
+  // bucket after can_double. v1 and v2 files still load, as non-counting.
+  uint32_t version = 3;
+  uint64_t tableSize = visitedCount_;
 
   file.write(reinterpret_cast<const char *>(&version), sizeof(version));
   file.write(reinterpret_cast<const char *>(&tableSize), sizeof(tableSize));
@@ -54,6 +55,8 @@ void PolicyTable::saveToBinary(const std::string &filepath) const {
                sizeof(state.canSplit));
     file.write(reinterpret_cast<const char *>(&state.canDouble),
                sizeof(state.canDouble));
+    const uint8_t bucket = static_cast<uint8_t>(state.countBucket);
+    file.write(reinterpret_cast<const char *>(&bucket), sizeof(bucket));
 
     file.write(reinterpret_cast<const char *>(table_[i].data()),
                sizeof(double) * NUM_ACTIONS);
@@ -76,8 +79,11 @@ void PolicyTable::loadFromBinary(const std::string &filepath) {
   file.read(reinterpret_cast<char *>(&version), sizeof(version));
   file.read(reinterpret_cast<char *>(&tableSize), sizeof(tableSize));
 
-  if (version != 1 && version != 2) {
+  if (version < 1 || version > 3) {
     throw std::runtime_error("Unsupported file version");
+  }
+  if (!file || tableSize > TABLE_SIZE) {
+    throw std::runtime_error("Corrupt Q-table header: " + filepath);
   }
 
   clear();
@@ -96,6 +102,11 @@ void PolicyTable::loadFromBinary(const std::string &filepath) {
               sizeof(state.canSplit));
     file.read(reinterpret_cast<char *>(&state.canDouble),
               sizeof(state.canDouble));
+    if (version >= 3) {
+      uint8_t bucket = 0;
+      file.read(reinterpret_cast<char *>(&bucket), sizeof(bucket));
+      state.countBucket = bucket;
+    }
 
     file.read(reinterpret_cast<char *>(qvalues.data()),
               sizeof(double) * NUM_ACTIONS);
@@ -111,10 +122,16 @@ void PolicyTable::loadFromBinary(const std::string &filepath) {
       counts.fill(1);
     }
 
+    if (!file) {
+      throw std::runtime_error("Truncated Q-table: " + filepath);
+    }
     size_t idx = state.hash();
     table_[idx] = qvalues;
     visits_[idx] = counts;
-    visited_[idx] = true;
+    if (!visited_[idx]) {
+      visited_[idx] = 1;
+      ++visitedCount_;
+    }
   }
 
   file.close();
@@ -128,7 +145,7 @@ void PolicyTable::exportToCSV(const std::string &filepath) const {
     throw std::runtime_error("Cannot open file for writing: " + filepath);
   }
 
-  file << "player_total,dealer_card,usable_ace,can_split,can_double,"
+  file << "player_total,dealer_card,usable_ace,can_split,can_double,count_bucket,"
           "Q_HIT,Q_STAND,Q_DOUBLE,Q_SPLIT,Q_SURRENDER,"
           "N_HIT,N_STAND,N_DOUBLE,N_SPLIT,N_SURRENDER\n";
   file << std::fixed << std::setprecision(6);
@@ -143,7 +160,7 @@ void PolicyTable::exportToCSV(const std::string &filepath) const {
     file << state.playerTotal << "," << state.dealerUpCard << ","
          << (state.hasUsableAce ? "1" : "0") << ","
          << (state.canSplit ? "1" : "0") << ","
-         << (state.canDouble ? "1" : "0") << ",";
+         << (state.canDouble ? "1" : "0") << "," << state.countBucket << ",";
 
     for (size_t j = 0; j < NUM_ACTIONS; ++j) {
       file << table_[i][j] << ",";

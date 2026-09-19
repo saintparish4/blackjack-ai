@@ -22,6 +22,11 @@ std::string State::toString() const {
     oss << ", canDouble";
   }
 
+  if (countBucket != COUNT_UNTRACKED) {
+    const int tc = trueCountOfBucket(countBucket);
+    oss << ", tc" << (tc >= 0 ? "+" : "") << tc;
+  }
+
   oss << ")";
   return oss.str();
 }
