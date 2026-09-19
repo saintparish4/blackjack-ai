@@ -32,9 +32,9 @@ cp analysis/training_report.txt "$ROOT/docs/training_report.txt"
 script -qc "$BUILD/play --report --model ./models/final_agent" /dev/null \
     | "$PYTHON" "$ROOT/analysis/ansi_to_png.py" --until "^Not scored|^Divergences" \
         -o "$ROOT/docs/images/strategy_chart.png"
-# Seed 1 deals a pair of 9s against a 7 in the second hand: a split the agent
-# makes and the book does not, which is a truer picture than a perfect hand.
-"$BUILD/play" --mode ai --model ./models/final_agent --hands 2 --seed 1 \
+# Seed 59 deals split aces (one card each), a soft 20 that loses to a 21, and
+# an 11 doubled against a queen: splitting, doubling and a loss in three hands.
+"$BUILD/play" --mode ai --model ./models/final_agent --hands 3 --seed 59 \
     | "$PYTHON" "$ROOT/analysis/ansi_to_png.py" \
         -o "$ROOT/docs/images/play_ai_mode.png"
 

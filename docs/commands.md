@@ -56,7 +56,7 @@ Stay in `core/` for build and run. Executables live in `./build/`.
 - ./build/play --mode human --hands 0
 - ./build/play --mode ai --model ./models/final_agent --hands 5
 - ./build/play --mode ai --model ./models/final_agent --hands 10 --beginner
-- ./build/play --mode ai --model ./models/final_agent --hands 2 --seed 1     [ replay a shoe ]
+- ./build/play --mode ai --model ./models/final_agent --hands 3 --seed 59    [ replay a shoe ]
 - ./build/play --mode advisor --model ./models/final_agent --hands 5
 - ./build/play --mode advisor --model ./models/final_agent --hands 5 --beginner
 
@@ -89,6 +89,11 @@ Python commands assume you are in `analysis/` (or the directory containing `requ
 
 ## Install dependencies
 - pip install -r requirements.txt
+
+## Rank experiment arms (from the repo root)
+- python analysis/leaderboard.py experiments/001-double-down/confirm
+- python analysis/leaderboard.py experiments/001-double-down/explore --markdown
+- experiments/001-double-down/run.sh all     [ reruns experiment 001: explore + confirm ]
 
 ## Publish results (from the repo root)
 - analysis/publish_results.sh     [ retrains tuned.cfg (seed 1), rewrites docs/training_report.txt and docs/images/ ]

@@ -8,7 +8,8 @@ with everything else.
 
 Usage (from core/, after training):
     script -qc "./build/play --report --model ./models/final_agent" /dev/null \\
-        | python ../analysis/ansi_to_png.py --head 46 -o ../docs/images/strategy_chart.png
+        | python ../analysis/ansi_to_png.py --until "Not scored" \\
+            -o ../docs/images/strategy_chart.png
 
 `script` gives the binary a pseudo-terminal, which is what makes it emit colour.
 """
@@ -72,9 +73,18 @@ def parse(text: str) -> list[list[tuple[str, str, bool]]]:
     return lines
 
 
-def trim(lines, head):
+def plain(line) -> str:
+    return "".join(text for text, _, _ in line)
+
+
+def trim(lines, head, until=None):
     while lines and not lines[0]:
         lines.pop(0)
+    if until:
+        for i, line in enumerate(lines):
+            if re.search(until, plain(line)):
+                lines = lines[: i + 1]
+                break
     if head:
         lines = lines[:head]
     while lines and not lines[-1]:
@@ -109,11 +119,13 @@ def main() -> int:
     parser.add_argument("-o", "--output", required=True, help="PNG path")
     parser.add_argument("--head", type=int, default=0,
                         help="Keep only the first N lines (after leading blanks)")
+    parser.add_argument("--until", metavar="REGEX",
+                        help="Stop after the first line matching REGEX")
     parser.add_argument("--font-size", type=float, default=13.0)
     args = parser.parse_args()
 
     text = open(args.input, encoding="utf-8").read() if args.input else sys.stdin.read()
-    lines = trim(parse(text), args.head)
+    lines = trim(parse(text), args.head, args.until)
     if not lines:
         print("No input to render", file=sys.stderr)
         return 1

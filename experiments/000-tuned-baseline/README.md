@@ -1,5 +1,9 @@
 # 000: tuned baseline
 
+> **Historical.** Recorded on 2026-09-19 before experiment 001 fixed two player-favourable engine
+> rules, completed the basic strategy chart and fixed split credit assignment. These numbers
+> aren't comparable with later ones; 001's `baseline` arm is the current equivalent.
+
 **Question:** how much do the published numbers depend on the seed?
 
 **Setup:** `config/tuned.cfg` unchanged (Q-learning, α = 0.05, γ = 0.95, 5M episodes, Vegas Strip

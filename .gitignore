@@ -95,7 +95,7 @@ core/models/
 # Experiment runner output. Write-ups and results.csv/summary.csv under
 # experiments/ are tracked; per-seed models and logs are regenerable.
 core/experiments/
-experiments/*/seed-*/
+experiments/**/seed-*/
 
 # Logs
 *.log

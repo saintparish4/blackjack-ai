@@ -6,23 +6,27 @@ through the same `Evaluator`, game engine and rules as the in-engine baselines.
 
 ## Scoreboard
 
-_Last updated 2026-09-19, after step 1 (lab bench)._
+_Last updated 2026-09-19, after step 2 (teach it to double)._
 
 | Area | Metric | Value | Reproduce with (from `core/`) |
 |------|--------|-------|-------------------------------|
-| **Headline** | Learned agent EV per round | **−0.0294 ± 0.0045** | `./build/train --config ../config/tuned.cfg` |
-| | Basic strategy EV per round (same run) | −0.0023 ± 0.0049 | same run |
-| | Random play EV per round (same run) | −0.4458 ± 0.0057 | same run |
-| | EV gap recovered | **93.9%** | same run |
-| **Spread** | EV gap recovered, 5 seeds | 93.3% ± 1.9 (range 91.2–95.2) | `./build/experiment --config ../config/tuned.cfg --seeds 5` |
-| | Agent EV, 5 seeds | −0.0330 ± 0.0079 (range −0.0427 to −0.0268) | same |
-| **Policy** | Strategy accuracy: overall / two-card / multi-card | 87.3% / 84.6% / 89.6% | seed 1 |
-| | Book doubles (hard 9–11) the agent makes | 3 of 22 | seed 1 strategy chart |
-| **Engineering** | Unit tests | 131 passing, 7 suites | `./build/run_tests` |
-| | Training throughput | ~2.7M episodes/s | training report |
-| | Game simulation | 5.6–6.1M rounds/s | `./build/benchmark` |
-| | Greedy decision latency | 3.9–4.5 ns | `./build/benchmark` |
-| **Lab** | Experiments recorded | 1 ([`000-tuned-baseline`](../experiments/000-tuned-baseline/)) | [`experiments/`](../experiments/) |
+| **Headline** | Learned agent EV per round | **−0.0098 ± 0.0049** | `./build/train --config ../config/tuned.cfg` |
+| | Basic strategy EV per round (same run) | −0.0052 ± 0.0050 | same run |
+| | Random play EV per round (same run) | −0.4443 ± 0.0057 | same run |
+| | EV gap recovered | **99.0%** | same run |
+| **Confirmed** | Agent vs book, 10 fresh seeds × 1M rounds | −0.0071 ± 0.0008 vs −0.0054 ± 0.0006 | `experiments/001-double-down/run.sh confirm` |
+| | Shortfall to basic strategy | **0.0017 per round** (was 0.026) | same |
+| **Spread** | EV gap recovered, seeds 1–5 | 99.7% ± 1.0 (range 98.8–100.6) | `./build/experiment --config ../config/tuned.cfg --seeds 5` |
+| | Agent EV, seeds 1–5 | −0.0076 ± 0.0024 (range −0.0098 to −0.0049) | same |
+| **Policy** | Accuracy: overall / two-card / multi-card / pairs | 94.9% / 92.9% / 97.8% / 92.0% | seed 1 |
+| | Book doubles (hard 9–11) the agent makes | 18 of 21 (was 3) | seed 1 strategy chart |
+| **Engine** | Basic strategy EV, 20M rounds | −0.0061 ± 0.0004 (published house edge for these rules: ≈ −0.005 to −0.006) | `./build/experiment --config ../config/tuned.cfg --seeds 4 --episodes 1000 --eval-rounds 5000000` |
+| **Engineering** | Unit tests | 150 passing, 8 suites | `./build/run_tests` |
+| | Training throughput | 1.1M episodes/s in the published run (machine shared with other jobs; 2.0–2.7M/s measured idle) | training report |
+| | Game simulation | 5.6–6.1M rounds/s (step 1 measurement) | `./build/benchmark` |
+| | Greedy decision latency | 3.9–4.5 ns (step 1 measurement) | `./build/benchmark` |
+| **Lab** | Experiments recorded | 2 ([`000`](../experiments/000-tuned-baseline/), [`001`](../experiments/001-double-down/)) | [`experiments/`](../experiments/) |
+| | Arms run in 001 | 18 explored, 7 confirmed | [`experiments/001-double-down/`](../experiments/001-double-down/) |
 | **Counting** | Learned counter's edge per unit bet | not started (step 4) | |
 | **Product** | Browser demo | not started (step 3) | |
 
@@ -32,11 +36,44 @@ _Last updated 2026-09-19, after step 1 (lab bench)._
 ## Roadmap status
 
 - [x] **Step 1: lab bench.** Seeds, experiment runner, early stopping on accuracy or EV, payout fix.
-- [ ] **Step 2: teach it to double.** Visit-scaled α, Expected SARSA, Double Q-learning.
+- [x] **Step 2: teach it to double.** Visit-scaled α wins; the shortfall to the book is 0.0017/round.
 - [ ] **Step 3: browser demo.** WebAssembly build, Play, Coach and Watch modes.
 - [ ] **Step 4: card counting.** Hi-Lo true count in the state, learned bet sizing.
 
 ## Milestones
+
+### Step 2: teach it to double (2026-09-19)
+
+**What landed**
+
+- **Visit-scaled step size** (`alpha_schedule = visit`, α = 1/(1+n)^ω), now the default in both
+  configs. Also new: `ExpectedSarsaAgent`, `DoubleQLearningAgent`, and a `TabularAgent` base they
+  share.
+- **Engine:** split aces take one card each, and 21 after a split is no longer a natural paying 3:2.
+- **Yardstick:** full basic strategy for the engine's rules, with soft doubles, double-else-stand,
+  no-DAS pair splits and S17/H17 differences, and surrender only on opening hands.
+- **Split credit:** SPLIT is valued from both hands, γ·(V₁ + V₂), and each hand's last decision
+  learns its own result.
+- **Audit:** pair decisions are now scored and charted.
+- **Experiment 001:** 18 arms explored on seeds 1–5, 7 confirmed on fresh seeds 101–110.
+
+**Metrics at this milestone**
+
+| Metric | Step 1 (old engine and chart) | Step 2 (seed 1) |
+|--------|--------------------------------|-----------------|
+| Agent EV per round | −0.0294 ± 0.0045 | −0.0098 ± 0.0049 |
+| Basic strategy EV | −0.0023 ± 0.0049 (inflated by engine bugs) | −0.0052 ± 0.0050 |
+| EV gap recovered | 93.9% | 99.0% |
+| Agent vs book, confirmed | n/a | −0.0071 vs −0.0054 (10 seeds × 1M rounds) |
+| Accuracy: two-card | 84.6% | 92.9% |
+| Accuracy: pairs | not audited | 92.0% |
+| Book doubles made (hard 9–11) | 3 | 18 of 21 |
+| Tests | 131 | 150 |
+
+The old and new book numbers aren't comparable. The old engine paid 3:2 on A+T after a split and
+let split aces draw, which flattered every policy. With the engine fix and the fuller chart together,
+basic strategy went from −0.0033 (5 seeds) to −0.0061 (20M rounds), in line with the published house
+edge for these rules.
 
 ### Step 1: lab bench (2026-09-19)
 
@@ -76,6 +113,9 @@ pinned to a seed, and the five-seed spread matches the hand-run spread the READM
 - **EV gap recovered**: (agent − random) / (basic strategy − random), with all three measured on
   the same rules by the same evaluator. 0% plays like random, 100% like the book.
 - **Strategy accuracy**: share of audited states where the greedy action matches basic strategy.
-  It's scored separately for two-card hands (where doubling lives) and multi-card hands. States
-  where some legal action was never trained are reported as coverage gaps, not scored.
+  It's scored separately for two-card hands (where doubling lives), multi-card hands, and opening
+  pairs (since step 2). States where some legal action was never trained are reported as coverage
+  gaps, not scored.
+- **Shortfall to basic strategy**: book EV − agent EV per round. Unlike gap recovered, it doesn't
+  shrink just because random play is terrible.
 - **Win rate** isn't tracked as progress. It sits near 43% for almost any sensible policy.
