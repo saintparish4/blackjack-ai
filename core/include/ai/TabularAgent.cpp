@@ -49,6 +49,14 @@ TabularAgent::nextActionsFor(const Experience &experience) {
                                              : experience.validNextActions;
 }
 
+const std::vector<Action> &
+TabularAgent::secondNextActionsFor(const Experience &experience) {
+  static const std::vector<Action> fallback = {Action::HIT, Action::STAND};
+  return experience.secondValidNextActions.empty()
+             ? fallback
+             : experience.secondValidNextActions;
+}
+
 double TabularAgent::stepSize(uint32_t priorUpdates) const {
   if (params_.alphaSchedule == AlphaSchedule::CONSTANT) {
     return params_.learningRate;
@@ -65,8 +73,12 @@ void TabularAgent::learn(const Experience &experience) {
   double currentQ = qTable_.get(state, action);
   double targetQ = experience.reward;
   if (!experience.done) {
-    targetQ += params_.discountFactor *
-               bootstrapValue(experience.nextState, nextActionsFor(experience));
+    double next = bootstrapValue(experience.nextState, nextActionsFor(experience));
+    if (experience.secondNextState) {
+      next += bootstrapValue(*experience.secondNextState,
+                             secondNextActionsFor(experience));
+    }
+    targetQ += params_.discountFactor * next;
   }
 
   // Q(s,a) ← Q + α[target - Q]

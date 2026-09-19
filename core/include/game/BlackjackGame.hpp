@@ -62,6 +62,9 @@ namespace blackjack {
         /** Every player hand this round: one, or two after a split. */
         const std::vector<Hand>& getPlayerHands() const { return playerHands_; }
 
+        /** Index into getPlayerHands() of the hand being played. */
+        size_t getCurrentHandIndex() const { return currentHandIndex_; }
+
         /** hideHoleCard: true to show only upcard (e.g. during player turn). */
         Hand getDealerHand(bool hideHoleCard = false) const;
 

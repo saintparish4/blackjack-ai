@@ -111,3 +111,76 @@ TEST_F(TrainerTest, CheckpointSavingCreatesFiles) {
   }
   EXPECT_TRUE(foundCheckpoint);
 }
+
+namespace {
+
+/// Splits whenever it can, otherwise stands, and records what it learns from.
+class SplitSpyAgent : public Agent {
+public:
+  std::vector<Experience> seen;
+
+  Action chooseAction(const State &, const std::vector<Action> &valid,
+                      bool) override {
+    for (Action a : valid) {
+      if (a == Action::SPLIT) return a;
+    }
+    return Action::STAND;
+  }
+  void learn(const Experience &e) override { seen.push_back(e); }
+  double getQValue(const State &, Action) const override { return 0.0; }
+  void save(const std::string &) const override {}
+  void load(const std::string &) override {}
+  std::string getName() const override { return "SplitSpy"; }
+};
+
+} // namespace
+
+// After a split, each hand's last decision must learn that hand's own result,
+// and SPLIT itself must be valued from both hands. They used to form one chain
+// in which SPLIT was valued as a single hand, which made splitting losing
+// pairs look half as costly as it is.
+TEST_F(TrainerTest, SplitCreditsEachHandSeparately) {
+  config.seed = 12;
+  auto spy = std::make_shared<SplitSpyAgent>();
+  Trainer trainer(spy, config);
+
+  int splitRounds = 0;
+  for (int i = 0; i < 20000 && splitRounds < 25; ++i) {
+    spy->seen.clear();
+    EpisodeStats stats = trainer.runEpisode();
+    if (spy->seen.empty() || spy->seen[0].action != Action::SPLIT) continue;
+    ++splitRounds;
+
+    const Experience &split = spy->seen[0];
+    // Split aces take one card each and need no decisions: the split itself
+    // is terminal with the total.
+    if (spy->seen.size() == 1) {
+      EXPECT_TRUE(split.done);
+      EXPECT_DOUBLE_EQ(split.reward, stats.reward);
+      continue;
+    }
+
+    // Any other split bootstraps from both hands, and the second-hand state
+    // it recorded must be the state that hand is actually played from.
+    ASSERT_EQ(spy->seen.size(), 3u);
+    EXPECT_FALSE(split.done);
+    EXPECT_DOUBLE_EQ(split.reward, 0.0);
+    ASSERT_TRUE(split.secondNextState.has_value());
+    EXPECT_EQ(split.nextState, spy->seen[1].state);
+    EXPECT_EQ(*split.secondNextState, spy->seen[2].state);
+    EXPECT_EQ(split.secondValidNextActions,
+              (std::vector<Action>{Action::HIT, Action::STAND}));
+
+    // Then one STAND per hand, each terminal with its own result.
+    double perHandTotal = 0.0;
+    for (size_t k = 1; k < 3; ++k) {
+      EXPECT_EQ(spy->seen[k].action, Action::STAND);
+      EXPECT_TRUE(spy->seen[k].done) << "hand " << k;
+      EXPECT_GE(spy->seen[k].reward, -1.0);
+      EXPECT_LE(spy->seen[k].reward, 1.0);
+      perHandTotal += spy->seen[k].reward;
+    }
+    EXPECT_DOUBLE_EQ(perHandTotal, stats.reward);
+  }
+  EXPECT_GT(splitRounds, 0);
+}

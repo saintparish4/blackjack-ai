@@ -101,6 +101,8 @@ protected:
    *  it carries none. */
   static const std::vector<Action> &
   nextActionsFor(const Experience &experience);
+  static const std::vector<Action> &
+  secondNextActionsFor(const Experience &experience);
 
   void decayEpsilon();
   Action greedyAction(const State &state,

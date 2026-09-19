@@ -98,6 +98,26 @@ TEST(AgentTest, ExpectedSarsaBootstrapsFromThePolicysExpectation) {
   EXPECT_DOUBLE_EQ(qlearn.getQValue(kS, Action::HIT), 1.0);
 }
 
+// A split moves into two hands, so its value is the sum of both.
+TEST(AgentTest, SplitTargetBootstrapsFromBothHands) {
+  const std::vector<Action> next = {Action::HIT, Action::STAND};
+  const State pair(16, 10, false, /*canSplit=*/true, /*canDouble=*/true);
+  const State hand1(18, 10, false, false, false);
+  const State hand2(13, 10, false, false, false);
+
+  QLearningAgent agent(params(1.0, 1.0, 0.0), 1u);
+  agent.learn(terminal(hand1, Action::STAND, 0.4));
+  agent.learn(terminal(hand2, Action::HIT, -0.5));
+  agent.learn(terminal(hand2, Action::STAND, -0.6));
+
+  Experience split(pair, Action::SPLIT, 0.0, hand1, false, next);
+  split.secondNextState = hand2;
+  split.secondValidNextActions = next;
+  agent.learn(split);
+
+  EXPECT_DOUBLE_EQ(agent.getQValue(pair, Action::SPLIT), 0.4 + -0.5);
+}
+
 TEST(AgentTest, DoubleQCombinedTableTracksTotalUpdates) {
   DoubleQLearningAgent agent(params(1.0, 1.0, 0.0), 3u);
   for (int i = 0; i < 20; ++i) agent.learn(terminal(kS, Action::DOUBLE, 2.0));

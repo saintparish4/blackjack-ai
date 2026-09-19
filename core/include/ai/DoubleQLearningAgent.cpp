@@ -25,12 +25,18 @@ void DoubleQLearningAgent::learn(const Experience &experience) {
   PolicyTable &target = updateA ? tableA_ : tableB_;
   const PolicyTable &other = updateA ? tableB_ : tableA_;
 
+  // Select with one table, evaluate with the other.
+  auto crossValue = [&](const State &next, const std::vector<Action> &valid) {
+    return other.get(next, target.getMaxAction(next, valid));
+  };
   double targetQ = experience.reward;
   if (!experience.done) {
-    const std::vector<Action> &next = nextActionsFor(experience);
-    // Select with one table, evaluate with the other.
-    const Action best = target.getMaxAction(experience.nextState, next);
-    targetQ += params_.discountFactor * other.get(experience.nextState, best);
+    double next = crossValue(experience.nextState, nextActionsFor(experience));
+    if (experience.secondNextState) {
+      next += crossValue(*experience.secondNextState,
+                         secondNextActionsFor(experience));
+    }
+    targetQ += params_.discountFactor * next;
   }
 
   const double currentQ = target.get(state, action);

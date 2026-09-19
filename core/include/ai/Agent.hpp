@@ -2,6 +2,7 @@
 
 #include "State.hpp"
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -35,6 +36,12 @@ struct Experience {
   State nextState;
   bool done;
   std::vector<Action> validNextActions;
+
+  /// A split moves into two states at once: the first hand (nextState) and
+  /// the second. The split is worth both, so the target bootstraps from the
+  /// sum. Unset for every other action.
+  std::optional<State> secondNextState;
+  std::vector<Action> secondValidNextActions;
 
   Experience(const State &s, Action a, double r, const State &ns, bool d,
              std::vector<Action> vna = {})

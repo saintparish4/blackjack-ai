@@ -186,7 +186,7 @@ EpisodeStats Trainer::runEpisode() {
   if (game_->isRoundComplete()) {
     const std::vector<Outcome> &outcomes = game_->getOutcomes();
     const std::vector<bool> &wasDoubled = game_->getWasDoubledByHand();
-    finishEpisode(experiences, outcomes, wasDoubled);
+    finishEpisode(experiences, {}, outcomes, wasDoubled);
     stats.outcome = outcomes.empty() ? Outcome::PUSH : outcomes[0];
     stats.reward = 0.0;
     for (size_t i = 0; i < outcomes.size(); ++i) {
@@ -199,7 +199,8 @@ EpisodeStats Trainer::runEpisode() {
   }
 
   // Play agent's turn
-  playAgentTurn(experiences);
+  std::vector<StepInfo> steps;
+  playAgentTurn(experiences, steps);
 
   // Get outcomes (one per hand; multiple after split)
   const std::vector<Outcome> &outcomes = game_->getOutcomes();
@@ -220,12 +221,13 @@ EpisodeStats Trainer::runEpisode() {
       [](Outcome o) { return o == Outcome::DEALER_BUST; });
 
   // Learn from all experiences
-  finishEpisode(experiences, outcomes, wasDoubled);
+  finishEpisode(experiences, steps, outcomes, wasDoubled);
 
   return stats;
 }
 
-void Trainer::playAgentTurn(std::vector<ai::Experience> &experiences) {
+void Trainer::playAgentTurn(std::vector<ai::Experience> &experiences,
+                            std::vector<StepInfo> &steps) {
   while (!game_->isRoundComplete()) {
     const Hand &playerHand = game_->getPlayerHand();
     const Hand &dealerHand = game_->getDealerHand(true);
@@ -240,7 +242,19 @@ void Trainer::playAgentTurn(std::vector<ai::Experience> &experiences) {
 
     ai::Action action = agent_->chooseAction(currentState, validActions, true);
 
+    const size_t handBefore = game_->getCurrentHandIndex();
+    const size_t handsBefore = game_->getPlayerHands().size();
     ai::GameStateConverter::executeAction(action, *game_);
+
+    StepInfo step;
+    step.hand = handBefore;
+    step.isSplit = game_->getPlayerHands().size() > handsBefore;
+    // Finishing the first split hand moves play to the second; that must
+    // not read as a transition into the second hand's state.
+    step.endsHand = !step.isSplit &&
+                    (game_->isRoundComplete() ||
+                     game_->getCurrentHandIndex() != handBefore);
+    steps.push_back(step);
 
     ai::State nextState;
     std::vector<ai::Action> nextValidActions;
@@ -256,21 +270,60 @@ void Trainer::playAgentTurn(std::vector<ai::Experience> &experiences) {
     experiences.emplace_back(currentState, action, 0.0, nextState,
                              game_->isRoundComplete(),
                              std::move(nextValidActions));
+
+    if (step.isSplit && !game_->isRoundComplete()) {
+      // The second hand is dealt at the split but played later. The engine
+      // allows neither a resplit nor a double after splitting, so when play
+      // reaches it the options are the ones the first hand has now; the
+      // SplitCreditsEachHandSeparately test holds this in place.
+      const Hand &second = game_->getPlayerHands()[1];
+      experiences.back().secondNextState = ai::GameStateConverter::toAIState(
+          second, game_->getDealerHand(true), game_->canSplit(),
+          game_->canDoubleDown());
+      experiences.back().secondValidNextActions =
+          ai::GameStateConverter::getValidActions(second, game_->canSplit(),
+                                                  game_->canDoubleDown(),
+                                                  game_->canSurrender());
+    }
   }
 }
 
 void Trainer::finishEpisode(std::vector<ai::Experience> &experiences,
+                            const std::vector<StepInfo> &steps,
                             const std::vector<Outcome> &outcomes,
                             const std::vector<bool> &wasDoubledByHand) {
-  double finalReward = 0.0;
+  std::vector<double> handReward(outcomes.size(), 0.0);
+  double total = 0.0;
   for (size_t i = 0; i < outcomes.size(); ++i) {
-    finalReward += ai::GameStateConverter::outcomeToReward(
+    handReward[i] = ai::GameStateConverter::outcomeToReward(
         outcomes[i], i < wasDoubledByHand.size() && wasDoubledByHand[i],
         config_.gameRules.blackjackPayout);
+    total += handReward[i];
   }
 
+  // Split rounds used to flow as one chain: SPLIT bootstrapped from the first
+  // hand alone, the first hand's last decision bootstrapped from the second
+  // hand's state, and the summed reward landed on the second hand's last
+  // decision. A split then looked worth one hand, so splitting a losing pair
+  // (7,7 against a T) looked half as bad as it is and the agent over-split.
+  //
+  // Now SPLIT bootstraps from both hands' states (see playAgentTurn), and each
+  // hand's last decision is terminal with that hand's own reward. A Monte
+  // Carlo total for SPLIT was tried first; it values the split under the
+  // exploring play that follows it, mostly from early training, and swung the
+  // agent to under-splitting instead.
   for (size_t i = 0; i < experiences.size(); ++i) {
-    experiences[i].reward = (i + 1 == experiences.size()) ? finalReward : 0.0;
+    ai::Experience &exp = experiences[i];
+    const StepInfo &step = steps[i];
+    if (step.isSplit) {
+      // Split aces settle on the spot, so their split is terminal.
+      exp.reward = exp.done ? total : 0.0;
+    } else if (step.endsHand) {
+      exp.done = true;
+      exp.reward = step.hand < handReward.size() ? handReward[step.hand] : total;
+    } else {
+      exp.reward = 0.0;
+    }
   }
 
   for (const auto &exp : experiences) {

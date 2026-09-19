@@ -260,19 +260,35 @@ private:
    */
   void updateMetrics(const EpisodeStats &stats);
 
+  /// Where a decision sits in the round, so rewards can be credited per hand.
+  struct StepInfo {
+    size_t hand = 0;       ///< Player hand the decision was made on
+    bool endsHand = false; ///< The decision finished that hand
+    bool isSplit = false;  ///< The decision split the hand in two
+  };
+
   /**
    * @brief Play agent's turn in episode
    */
-  void playAgentTurn(std::vector<ai::Experience> &experiences);
+  void playAgentTurn(std::vector<ai::Experience> &experiences,
+                     std::vector<StepInfo> &steps);
 
   /**
    * @brief Complete episode and learn from experiences
-   * @param outcomes One outcome per player hand (e.g. after split); reward is summed.
+   *
+   * Unsplit rounds: the last decision carries the round's reward. After a
+   * split, each hand's last decision carries that hand's own reward, and the
+   * SPLIT decision bootstraps from both hands' states, because a split is
+   * worth both hands, not the first one alone. Split aces settle at once, so
+   * their SPLIT is terminal with the total.
+   *
+   * @param outcomes One outcome per player hand (e.g. after split).
    * @param wasDoubledByHand One bool per hand; doubled hands get 2x reward.
    */
   void finishEpisode(std::vector<ai::Experience> &experiences,
-                    const std::vector<Outcome> &outcomes,
-                    const std::vector<bool> &wasDoubledByHand);
+                     const std::vector<StepInfo> &steps,
+                     const std::vector<Outcome> &outcomes,
+                     const std::vector<bool> &wasDoubledByHand);
 
   /**
    * @brief Run exhaustive convergence check against basic strategy, print to
