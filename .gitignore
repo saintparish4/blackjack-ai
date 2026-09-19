@@ -92,6 +92,10 @@ core/models/
 /analysis/training_report.txt
 /analysis/q_table.csv
 
+# Browser demo build output (web/build.sh); CI rebuilds it for Pages.
+build-wasm/
+web/wasm/
+
 # Experiment runner output. Write-ups and results.csv/summary.csv under
 # experiments/ are tracked; per-seed models and logs are regenerable.
 core/experiments/

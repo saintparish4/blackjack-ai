@@ -12,8 +12,10 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Threading (used by training library)
-find_package(Threads REQUIRED)
+# Threading (used by training library). The browser build has no threads.
+if(NOT EMSCRIPTEN)
+    find_package(Threads REQUIRED)
+endif()
 
 # A plain `cmake -B build` should produce an optimized build rather than the
 # unoptimized default, but without hard-coding flags that override the build
@@ -107,6 +109,25 @@ set(TRAINING_SOURCES
     include/training/Trainer.cpp
     include/training/StrategyChart.cpp
 )
+
+# === Browser build (emcmake cmake ...) ===
+# Only what the web demo plays with: the engine, the agents and the basic
+# strategy chart (Evaluator.cpp). No threads, no tests, no CLI tools. Built by
+# web/build.sh and the Pages workflow; produces blackjack.mjs + blackjack.wasm.
+if(EMSCRIPTEN)
+    add_executable(blackjack_wasm bindings/wasm/blackjack_wasm.cpp
+                   ${GAME_SOURCES} ${AI_SOURCES} include/training/Evaluator.cpp)
+    target_include_directories(blackjack_wasm PRIVATE include)
+    # Model loading reports a missing or corrupt file by throwing.
+    target_compile_options(blackjack_wasm PRIVATE -fexceptions)
+    target_link_options(blackjack_wasm PRIVATE
+        -fexceptions -lembind
+        -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createBlackjack
+        -sENVIRONMENT=web,node -sALLOW_MEMORY_GROWTH=1 -sFORCE_FILESYSTEM=1
+        "-sEXPORTED_RUNTIME_METHODS=['FS']")
+    set_target_properties(blackjack_wasm PROPERTIES OUTPUT_NAME blackjack SUFFIX ".mjs")
+    return()
+endif()
 
 add_library(blackjack_training STATIC ${TRAINING_SOURCES})
 target_include_directories(blackjack_training PUBLIC include)

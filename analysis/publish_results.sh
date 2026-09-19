@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Regenerate every published artifact from ONE seeded run of config/tuned.cfg:
-#   docs/training_report.txt, docs/images/*.png
+#   docs/training_report.txt, docs/images/*.png, web/model/ (the demo's model)
 #
 # The README's figures must all come from the same run. Doing it by hand made
 # it easy to refresh the plots and forget the report, or re-take a terminal
@@ -24,6 +24,10 @@ echo "Training $CONFIG in $WORK ..."
 "$BUILD/train" --config "$CONFIG" > train.log
 
 cp analysis/training_report.txt "$ROOT/docs/training_report.txt"
+# The browser demo plays the published model, not a separately trained one.
+mkdir -p "$ROOT/web/model"
+cp models/final_agent.qtable "$ROOT/web/model/agent.qtable"
+cp models/final_agent.meta "$ROOT/web/model/agent.meta"
 
 "$PYTHON" "$ROOT/analysis/plot_training.py" logs/training_*.csv \
     --qtable analysis/q_table.csv --output "$ROOT/docs/images/"

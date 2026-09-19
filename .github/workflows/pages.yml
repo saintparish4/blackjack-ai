@@ -1,0 +1,63 @@
+name: Web demo
+
+# Builds the WebAssembly demo and smoke-tests it on every push and PR; deploys
+# it to GitHub Pages from master. Pages must be set to "GitHub Actions" in the
+# repository settings (Settings -> Pages -> Build and deployment -> Source).
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: wasm build + smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pinned so a new Emscripten release can't change the shipped module
+      # without a commit that says so.
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 6.0.9
+
+      - name: Build WebAssembly module
+        run: web/build.sh
+
+      # Plays 20,000 rounds through the same API the page uses, against the
+      # published model, and checks the coaching logic the page shows.
+      - name: Smoke test in Node
+        run: node web/test/smoke.mjs
+
+      - name: Stage site
+        run: |
+          mkdir -p _site
+          cp -r web/index.html web/style.css web/js web/model web/wasm _site/
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

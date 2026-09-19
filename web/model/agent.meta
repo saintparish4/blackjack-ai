@@ -1,0 +1,11 @@
+agent_type: Q-Learning
+learning_rate: 0.05
+alpha_schedule: visit
+alpha_omega: 1
+alpha_min: 0
+discount_factor: 0.95
+epsilon: 0.05
+epsilon_min: 0.05
+epsilon_decay: 0.9999985
+step_count: 6671262
+state_space_size: 610

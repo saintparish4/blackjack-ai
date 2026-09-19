@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Blackjack AI · play, get coached, or watch it think</title>
+  <meta name="description" content="A reinforcement-learning agent that taught itself blackjack from 5 million hands of self-play. Play against its engine, get coached by it, or watch it think. Runs entirely in your browser.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">♠</span>
+      <div>
+        <h1>Blackjack AI</h1>
+        <p class="tagline">A reinforcement-learning agent that taught itself blackjack from 5 million
+          hands of self-play. It plays within 0.2% of a bet of textbook basic strategy.</p>
+      </div>
+    </div>
+    <nav class="modes" role="tablist" aria-label="Mode">
+      <button role="tab" data-mode="play" aria-selected="true">Play</button>
+      <button role="tab" data-mode="coach" aria-selected="false">Coach</button>
+      <button role="tab" data-mode="watch" aria-selected="false">Watch the AI</button>
+    </nav>
+    <p class="mode-help" id="mode-help"></p>
+  </header>
+
+  <main class="layout">
+    <section class="felt" aria-label="Table">
+      <div class="seat dealer">
+        <div class="seat-label">Dealer <span class="total" id="dealer-total"></span></div>
+        <div class="cards" id="dealer-cards"></div>
+      </div>
+
+      <div class="banner" id="banner" role="status" aria-live="polite"></div>
+
+      <div class="seat player">
+        <div class="hands" id="hands"></div>
+      </div>
+
+      <div class="controls" id="controls">
+        <div class="actions" id="actions"></div>
+        <div class="flow">
+          <button id="deal" class="primary">Deal <kbd>N</kbd></button>
+          <button id="step" class="primary" hidden>AI move <kbd>Space</kbd></button>
+          <label class="auto" id="auto-wrap" hidden><input type="checkbox" id="auto"> Auto-play</label>
+        </div>
+      </div>
+      <p class="loading" id="loading">Loading the engine and the trained model…</p>
+    </section>
+
+    <aside class="panel">
+      <section class="card ai-view" id="ai-view" aria-live="polite">
+        <h2>The AI's view</h2>
+        <div id="ai-body" class="muted">Deal a hand to see what the AI thinks.</div>
+      </section>
+
+      <section class="card feedback" id="feedback-card" hidden>
+        <h2>Your last decision</h2>
+        <div id="feedback"></div>
+      </section>
+
+      <section class="card stats">
+        <h2>This session</h2>
+        <dl class="stat-grid">
+          <div><dt>Hands</dt><dd id="s-hands">0</dd></div>
+          <div><dt>Result</dt><dd id="s-net">0</dd></div>
+          <div><dt>Matched the AI</dt><dd id="s-match">–</dd></div>
+          <div><dt>EV given up <span class="hint" title="Sum of the AI's estimated cost of every decision that differed from its own, in bets.">?</span></dt><dd id="s-cost">0</dd></div>
+        </dl>
+        <p class="challenge" id="challenge"></p>
+      </section>
+
+      <section class="card history">
+        <h2>Decisions</h2>
+        <ol id="history" class="history-list"></ol>
+      </section>
+    </aside>
+  </main>
+
+  <footer class="site-footer">
+    <details>
+      <summary>How does this work?</summary>
+      <p>The agent is a tabular Q-learner written in C++17. It starts knowing nothing but the legal
+        moves, plays five million hands against itself, and keeps a table of how much each move is
+        worth in each situation. Those numbers are the <em>Q-values</em> in the panel: the expected
+        result of that move, in bets. The page runs the same C++ engine and the same trained table,
+        compiled to WebAssembly, so nothing is sent anywhere.</p>
+      <p>The "cost" of a decision is the gap between the AI's value for its move and for yours. It's
+        the AI's estimate, not the truth. Where the AI and textbook basic strategy disagree, the panel
+        says so; those are the handful of close calls it still gets wrong.</p>
+      <p>Rules: six decks, dealer stands on soft 17, blackjack pays 3:2, double on any two cards, one
+        split, split aces get one card, no double after split, no surrender.</p>
+    </details>
+    <p class="fine">Play money only, for learning; no real-money gambling. ·
+      <a href="https://github.com/saintparish4/blackjack-ai">Source, results and write-ups on GitHub</a></p>
+  </footer>
+
+  <script type="module" src="js/app.mjs"></script>
+</body>
+</html>
