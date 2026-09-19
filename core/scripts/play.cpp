@@ -1,3 +1,4 @@
+#include "ai/Explain.hpp"
 #include "ai/GameStateConverter.hpp"
 #include "ai/QLearningAgent.hpp"
 #include "game/BlackjackGame.hpp"
@@ -129,48 +130,6 @@ int chipDelta(Outcome o, bool wasDoubled) {
     case Outcome::SURRENDER:        return -5;
     default:                        return 0;
     }
-}
-
-/** Return a confidence label derived from Q-value margin. */
-const char *confidenceLabel(double margin) {
-    if (margin > 0.15) return "High";
-    if (margin > 0.05) return "Medium";
-    return "Low";
-}
-
-/** Return a plain-English reason for the AI's recommendation. */
-std::string beginnerActionReason(Action action, const State &state) {
-    int dealer = (state.dealerUpCard == 1) ? 11 : state.dealerUpCard;
-    int player = state.playerTotal;
-
-    if (action == Action::SURRENDER) {
-        return "Your odds are very poor here — cutting losses is the right call.";
-    }
-    if (action == Action::DOUBLE) {
-        if (player == 11) return "11 is a great doubling spot — most cards give you 21 or close.";
-        if (player == 10) return "10 is strong for doubling — you're likely to land near 20.";
-        if (player == 9 && dealer >= 3 && dealer <= 6)
-            return "9 vs a weak dealer card is a good chance to double and profit.";
-        return "The math favors risking more here — doubling is the right move.";
-    }
-    if (action == Action::SPLIT) {
-        return "Splitting turns a weak hand into two chances to win.";
-    }
-    if (action == Action::STAND) {
-        if (player >= 17)
-            return "You're in solid territory — any new card risks busting you.";
-        if (dealer >= 2 && dealer <= 6)
-            return "Dealer's weak card means they'll likely bust on their own — no need to risk.";
-        return "Standing gives the dealer a chance to bust — the math favors it here.";
-    }
-    // HIT
-    if (dealer >= 7) {
-        return "Dealer's strong card means you need more to compete — take a card.";
-    }
-    if (player <= 11) {
-        return "You can't bust from here — always safe to take another card.";
-    }
-    return "Taking another card is the best play in this spot.";
 }
 
 // ---------------------------------------------------------------------------
@@ -487,7 +446,7 @@ void playAIMode(BlackjackGame &game, QLearningAgent &agent, int numHands, bool b
                           << color::RESET
                           << color::DIM << "  (Confidence: " << confidenceLabel(margin) << ")\n"
                           << color::RESET;
-                std::cout << color::DIM << "  Why: " << beginnerActionReason(action, state)
+                std::cout << color::DIM << "  Why: " << actionReason(action, state)
                           << "\n" << color::RESET;
             } else {
                 displayQValues(agent, state, validActions);
@@ -626,7 +585,7 @@ void playAdvisorMode(BlackjackGame &game, QLearningAgent &agent, int numHands, b
                           << color::RESET
                           << color::DIM << "  (Confidence: " << confidenceLabel(margin) << ")\n"
                           << color::RESET;
-                std::cout << color::DIM << "  Why: " << beginnerActionReason(aiAction, state)
+                std::cout << color::DIM << "  Why: " << actionReason(aiAction, state)
                           << "\n" << color::RESET;
             } else {
                 displayQValues(agent, state, validActions);

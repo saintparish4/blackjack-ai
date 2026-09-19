@@ -206,3 +206,27 @@ TEST(AgentTest, RunConfigBuildsEachAgentType) {
   RunConfig defaults = loadRunConfig(empty);
   EXPECT_EQ(defaults.agentType, "q-learning");
 }
+
+// === Plain-English explanations (shared by play --beginner and the web demo) ===
+
+#include "ai/Explain.hpp"
+
+TEST(ExplainTest, EveryActionGetsAReasonInEveryKindOfHand) {
+  for (Action a : {Action::HIT, Action::STAND, Action::DOUBLE, Action::SPLIT,
+                   Action::SURRENDER}) {
+    for (const State &s : {State(11, 6, false, false, true), State(17, 4, true, false, true),
+                           State(16, 10, false, true, true), State(12, 1, true, true, true)}) {
+      EXPECT_FALSE(actionReason(a, s).empty()) << actionToString(a) << " " << s.toString();
+    }
+  }
+}
+
+TEST(ExplainTest, ReasonsFitTheHand) {
+  // A soft double shouldn't be explained with the hard-11 line.
+  EXPECT_NE(actionReason(Action::DOUBLE, State(17, 4, true, false, true)).find("soft"),
+            std::string::npos);
+  EXPECT_NE(actionReason(Action::DOUBLE, State(11, 6, false, false, true)).find("11"),
+            std::string::npos);
+  EXPECT_STREQ(confidenceLabel(0.3), "High");
+  EXPECT_STREQ(confidenceLabel(0.01), "Low");
+}
