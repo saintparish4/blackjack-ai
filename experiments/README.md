@@ -18,6 +18,7 @@ The ground rules:
 |---|------------|----------|--------|
 | 000 | [tuned-baseline](000-tuned-baseline/) | How much does `tuned.cfg` vary from seed to seed? | Gap recovered 93.3% ± 1.9 over 5 seeds. Recorded before 001's engine and yardstick fixes, so not comparable with later numbers |
 | 001 | [double-down](001-double-down/) | Which learner change teaches the agent to double, and does it close the EV gap to the book? | Visit-scaled α, 1/(1+n): EV −0.0071 ± 0.0008 vs book −0.0054 ± 0.0006 on 10 fresh seeds. The shortfall fell from 0.026 to 0.0017 per round. Also fixed two engine rules, the book chart and split credit |
+| 002 | [card-counting](002-card-counting/) | Can the agent learn to beat the house by counting cards? | It learns *when to bet*: +0.27% ± 0.05 per unit wagered on 10 fresh seeds (flat basic strategy −0.58%), beating textbook Hi-Lo's ramp and tying Hi-Lo + Illustrious 18. Putting the count into its playing state failed: −0.10% ± 0.13 |
 
 ## Algorithm leaderboard
 
@@ -33,6 +34,20 @@ From experiment 001's confirmation phase: seeds 101–110, 5M training episodes,
 | Q-learning, constant α = 0.05 (old `tuned.cfg`) | −0.0313 ± 0.0011 | 94.1% ± 0.2 | 78.1% | 72.0% |
 | Expected SARSA, constant α | −0.0336 ± 0.0032 | 93.6% ± 0.7 | 78.0% | 74.2% |
 | Random legal play (reference) | about −0.444 | 0% by definition | n/a | n/a |
+
+## Card-counting leaderboard
+
+From experiment 002's confirmation phase: seeds 101–110, Vegas Strip, 75% penetration, 1–8 unit
+bets, 10M rounds per policy per seed, all policies on the same shoes.
+
+| Policy | EV per unit wagered | Units won / 100 rounds | Desirability index |
+|---|---|---|---|
+| **Basic strategy + learned bets** | **+0.27% ± 0.05** | **+0.74 ± 0.14** | **1.62 ± 0.31** |
+| Hi-Lo + Illustrious 18 (textbook) | +0.22% ± 0.03 | +0.32 ± 0.04 | 1.41 ± 0.18 |
+| Learned play + learned bets | +0.16% ± 0.07 | +0.40 ± 0.19 | 0.96 ± 0.42 |
+| Hi-Lo ramp (textbook) | +0.11% ± 0.04 | +0.16 ± 0.07 | 0.71 ± 0.29 |
+| Learned counter (count in state, 50M episodes) | −0.10% ± 0.13 | −0.18 ± 0.22 | −0.55 ± 0.74 |
+| Flat basic strategy | −0.58% ± 0.02 | −0.58 | n/a |
 
 Rank any folder of arms with `python analysis/leaderboard.py <folder> [--markdown]`.
 

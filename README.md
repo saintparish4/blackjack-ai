@@ -3,7 +3,7 @@
 [![CI](https://github.com/saintparish4/blackjack-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/saintparish4/blackjack-ai/actions/workflows/ci.yml)
 [![C++17](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus&logoColor=white)](https://en.cppreference.com/w/cpp/17)
 [![CMake](https://img.shields.io/badge/build-CMake-064F8C?logo=cmake&logoColor=white)](https://cmake.org/)
-[![Tests](https://img.shields.io/badge/tests-152%20passing-3fb950)](core/tests)
+[![Tests](https://img.shields.io/badge/tests-166%20passing-3fb950)](core/tests)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
 **▶ [Play it in your browser](https://saintparish4.github.io/blackjack-ai/)**: play against the
@@ -16,14 +16,25 @@ error land **within 0.002 per round of textbook basic strategy**: 99.6% of the e
 between random play and the book, confirmed on ten fresh seeds. A 5M-hand run takes a few
 seconds.
 
+Given a Hi-Lo card count, it then measured its own edge at every count, rediscovering the
+rule-of-thumb counters learn from books: about half a percent per true count. It learned to bet on
+it, turning a −0.58% game into **+0.27% per unit wagered**. That beats textbook Hi-Lo's bet ramp,
+and ties Hi-Lo with the Illustrious 18 index plays while winning twice as much per round
+([write-up](experiments/002-card-counting/)).
+
 Ships with an interactive play mode, a colour-coded strategy chart, an exhaustive post-training
 policy audit measured against in-engine baselines, a seeded experiment runner that makes every
 number reproducible, and Python visualisation scripts.
 
-**Where it's heading:** an experimental lab. The first experiment taught it to double
-([write-up](experiments/001-double-down/)), and the agent now runs in the browser
-([`web/`](web/)). Next: teach it to count cards. Progress and every tracked metric live in
-[`docs/progress.md`](docs/progress.md); experiment write-ups live in [`experiments/`](experiments/).
+**It's an experimental lab.** Experiments so far:
+
+- [taught it to double](experiments/001-double-down/)
+- put it in the [browser](web/)
+- [taught it to count cards](experiments/002-card-counting/), with an honest negative result on
+  count-aware play
+
+Progress and every tracked metric are in [`docs/progress.md`](docs/progress.md), and the
+experiment write-ups in [`experiments/`](experiments/).
 
 <p align="center">
   <img src="docs/images/strategy_chart.png" alt="Learned strategy chart, colour-coded against basic strategy" width="620">
@@ -152,6 +163,38 @@ Run-to-run variance, measured in one command with
 Seed-to-seed spread in EV is larger than any single run's evaluation error, which is why comparing
 two algorithms takes several seeds each.
 
+### Card counting: it learned when to bet
+
+With a Hi-Lo true count and a 1–8 unit bet spread, the agent plays 10M greedy rounds after training
+and averages its own result at each count. It bets the maximum wherever that measured edge is
+positive. Confirmed on ten fresh seeds, 10M rounds per policy per seed, with every policy on the
+same shoes (Vegas Strip, 75% penetration):
+
+| Policy | EV per unit wagered | Units won / 100 rounds | Desirability index |
+|---|---|---|---|
+| **Basic strategy + learned bets** | **+0.27% ± 0.05** | **+0.74 ± 0.14** | **1.62 ± 0.31** |
+| Hi-Lo + Illustrious 18 (textbook) | +0.22% ± 0.03 | +0.32 ± 0.04 | 1.41 ± 0.18 |
+| Learned play + learned bets | +0.16% ± 0.07 | +0.40 ± 0.19 | 0.96 ± 0.42 |
+| Hi-Lo ramp (textbook) | +0.11% ± 0.04 | +0.16 ± 0.07 | 0.71 ± 0.29 |
+| Learned counter (count in its playing state) | −0.10% ± 0.13 | −0.18 ± 0.22 | −0.55 ± 0.74 |
+| Flat basic strategy | −0.58% ± 0.02 | −0.58 | n/a |
+
+<p align="center">
+  <img src="docs/images/counting_edge.png" alt="Left: edge per unit bet at each true count for basic strategy and the learned agent, rising about half a percent per count. Right: the textbook Hi-Lo ramp against the learned bets, which jump to 8 units from TC +1 or +2" width="900">
+</p>
+
+- **Against the textbook ramp:** the learned bets beat it outright, with separated intervals on edge,
+  on winnings and on the risk-adjusted desirability index. The agent's measured edge crosses zero
+  near a true count of +1, and it bets up there instead of climbing slowly.
+- **Against Hi-Lo with the Illustrious 18:** it's a tie on edge and on risk-adjusted terms. It wins
+  twice as much per round because it bets bigger, which also means more risk.
+- **Playing the count failed.** Putting the count into the Q-table's state, so the agent could learn
+  index plays, didn't work: ten times the states spread the experience too thin, even over 50M
+  episodes. That's the next thing to fix
+  ([write-up and ideas](experiments/002-card-counting/#why-the-learned-counter-fails-to-learn-index-plays)).
+- **Penetration matters as the theory says:** at 50% nothing beats the game; at 90% everyone does
+  better.
+
 ---
 
 ## Features
@@ -165,6 +208,7 @@ two algorithms takes several seeds each.
 | **Strategy validation** | Exhaustive convergence report vs basic strategy for the engine's rules (S17/H17 aware), split into two-card, multi-card and pair contexts, with coverage reporting |
 | **EV baselines** | In-engine basic-strategy and random-play agents; every run reports agent vs book vs random EV with confidence intervals |
 | **Color-coded chart** | Terminal strategy grid — green = correct, red = wrong, yellow = uncertain |
+| **Card counting** | Hi-Lo running count of visible cards (hole card only once revealed) and true count in the engine; optional count bucket in the agent's state; learned bet sizing from the agent's measured edge per count; textbook Hi-Lo baselines with a 1–8 ramp and the Illustrious 18; EV per unit wagered, units per 100 rounds and desirability index |
 | **Browser demo** | The engine, model and book chart compiled to WebAssembly; Play / Coach / Watch modes with Q-value bars, per-move cost estimates, a 10-hand scorecard and seeded replays; deployed to GitHub Pages by CI |
 | **Interactive play** | `./play --mode human|ai|advisor` — play yourself, watch the AI, or get move-by-move advice; `--seed` replays a session |
 | **Beginner mode** | Plain-English card explanations, chip balance, AI reasoning in natural language |
@@ -368,7 +412,7 @@ cd build && ctest --output-on-failure
 ./build/run_tests --gtest_filter="TrainerTest.*"
 ```
 
-152 tests across 9 suites, run on every push against both GCC and Clang (see
+166 tests across 10 suites, run on every push against both GCC and Clang (see
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)). CI builds with `-Wall -Wextra -Werror
 -pedantic`, runs a separate ASan + UBSan job, smoke-tests the full train → evaluate → report → save
 pipeline, and runs the experiment runner twice to check its output is identical. A second workflow
@@ -404,6 +448,9 @@ agent           = q-learning
 alpha_schedule  = visit      # α = 1/(1+n)^alpha_omega per (state, action); or: constant
 alpha_omega     = 1.0
 learning_rate   = 0.1        # used by alpha_schedule = constant
+use_count       = false      # Hi-Lo true-count bucket in the state
+learn_bets      = false      # size bets from the agent's measured edge per count
+bet_sizing      = max_when_positive   # or: proportional (one unit per bet_unit_edge)
 discount_factor = 0.95
 epsilon         = 1.0
 epsilon_decay   = 0.99995
@@ -416,6 +463,7 @@ rules_preset         = vegas-strip
 # surrender          = false
 # blackjack_payout   = 1.5           # 1.2 for 6:5; rewards use this value
 # penetration        = 0.75
+# max_bet            = 1             # bet spread in units; above 1 adds Hi-Lo baselines
 ```
 
 A config can start with `extends = <path>` to inherit another file and override only what differs.
@@ -448,7 +496,7 @@ blackjack-ai/
 │   │   └── util/          # ArgParser, ConfigParser, ProgressBar, Seed
 │   ├── bindings/wasm/     # Embind API for the browser demo
 │   ├── scripts/           # train.cpp, play.cpp, experiment.cpp, benchmark.cpp
-│   └── tests/             # 150 unit tests (Google Test)
+│   └── tests/             # 166 unit tests (Google Test)
 ├── analysis/
 │   ├── plot_training.py   # Python visualisation script
 │   ├── ansi_to_png.py     # Renders coloured terminal output to PNG
@@ -474,11 +522,12 @@ the basic strategy chart: no threads, tests or CLI tools.
 
 - **`Card`, `Deck`, `Hand`** — primitive types. `Hand::getValue()` returns `{total, isSoft}` with cached result (invalidated on mutation). `Deck` accepts an optional seed for deterministic tests.
 - **`BlackjackGame`** — single-player vs dealer. Supports split (one split per round, sequential hands; split aces take one card each; 21 after a split is not a natural), double down (not after a split), late surrender, and immediate-blackjack detection with dealer peek. `getOutcomes()` / `getWasDoubledByHand()` / `getPlayerHands()` return one entry per hand.
-- **`GameRules`** — house rules struct with static preset factories.
+- **`GameRules`** — house rules struct with static preset factories, plus the table's bet spread (`maxBetUnits`).
+- **Counting** — `Card::hiLo()` tags; `BlackjackGame` keeps a running count of visible cards (the hole card joins when revealed), `getTrueCount()` over unseen decks, and `reshuffleIfDue()` so a bet can read the count of the shoe it's dealt from.
 
 ### Layer 2 — AI
 
-- **`State`** — discrete RL state: `{playerTotal, dealerUpCard, hasUsableAce, canSplit, canDouble}`. Bit-packed via `hash()` for O(1) Q-table lookup. Note that `canSplit`/`canDouble` are part of the key: the same total occupies a different slot depending on what is legal there, so the opening-hand and already-hit policies are learned independently.
+- **`State`** — discrete RL state: `{playerTotal, dealerUpCard, hasUsableAce, canSplit, canDouble, countBucket}`. Bit-packed into 16 bits via `hash()` for O(1) lookup in a 65,536-slot table. `canSplit`/`canDouble` are part of the key, so the opening-hand, already-hit and pair policies are learned independently. `countBucket` is 0 for agents that don't count, so their states keep the slots they always had.
 - **`Action`** — `HIT`, `STAND`, `DOUBLE`, `SPLIT`, `SURRENDER`.
 - **`TabularAgent`** — shared base: Q-table, ε-greedy with decay, step-size schedule (constant, or visit-scaled α = 1/(1+n)^ω), binary save/load, CSV export. Subclasses differ only in how they value the next state:
   - **`QLearningAgent`** — Q(s,a) ← Q + α[R + γ max Q(s′,a′) − Q].
@@ -495,7 +544,7 @@ the basic strategy chart: no threads, tests or CLI tools.
 - **`Evaluator`** — exploitation-mode evaluation, reward standard error, `compareAgainstBaselines` (agent vs book vs random on the same rules), and the shared `legalActionsFor` / `buildAuditStates` definitions used by every audit and chart. Seedable: each call deals a fresh shoe derived from the seed.
 - **`RunConfig`** — one place that turns a config file plus CLI overrides into a run (CLI > config > default), shared by `train`, `play` and `experiment`.
 - **`Experiment`** — trains and scores one seed of a run, summarises across seeds, writes the CSVs.
-- **`BasicStrategyAgent` / `RandomAgent`** — reference policies implementing `ai::Agent`, so they run through the identical evaluator, engine and rules as a learned agent. A baseline computed any other way is not comparable.
+- **`BasicStrategyAgent` / `RandomAgent` / `HiLoAgent`** — reference policies implementing `ai::Agent`, so they run through the identical evaluator, engine and rules as a learned agent. `HiLoAgent` is textbook counting: basic strategy plus a 1–8 ramp, optionally with the Illustrious 18 index plays. A baseline computed any other way is not comparable.
 - **`ConvergenceReport`** — exhaustive policy audit over three hand contexts: all `(playerTotal 4–21) × (dealerCard 1–10) × (soft/hard)` states for two-card and multi-card hands, plus all 100 opening pairs, scored separately; divergences sorted by Q-value margin; coverage gaps reported rather than scored.
 - **`BasicStrategy`** — the reference chart for the engine's actual rules (dealer peek, one split, split aces one card, no double after split), with soft doubles, double-else-stand cells, and S17/H17 differences taken from `GameRules`.
 - **`StrategyChart`** — colour-coded terminal grids for hard totals, soft totals and pairs (green / red / yellow per cell).
@@ -570,12 +619,17 @@ in [`docs/progress.md`](docs/progress.md):
    0.0017 per round ([write-up](experiments/001-double-down/)).
 3. **Browser demo** ✅ — the engine compiled to WebAssembly with Play, Coach and Watch-the-AI modes
    ([`web/`](web/)).
-4. **Card counting** — a Hi-Lo true count in the state plus learned bet sizing, measured as EV per
-   unit bet against flat-bet basic strategy and textbook Hi-Lo.
+4. **Card counting** ✅ — learned bet sizing beats textbook Hi-Lo's ramp and ties Hi-Lo + I18;
+   count-aware play didn't learn yet ([write-up](experiments/002-card-counting/)).
 
-After that: an exact dynamic-programming strategy solver to replace the hand-written chart, an
-algorithm leaderboard (Monte Carlo control, SARSA(λ)), full engine rules (double after split,
-resplits), and a DQN once the counting state outgrows a table.
+Next candidates:
+
+- **Teach the counter to play the count:** warm-start count buckets from the count-blind table, or
+  share statistics across neighbouring counts.
+- **Bankroll science:** Kelly sizing, risk of ruin and drawdowns, now that bets exist.
+- **An exact dynamic-programming solver** to replace the hand-written chart and price every mistake.
+- **Full engine rules:** double after split, resplits.
+- **An algorithm leaderboard:** Monte Carlo control, SARSA(λ).
 
 ---
 
