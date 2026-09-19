@@ -537,7 +537,9 @@ TEST_F(BlackjackGameTest, SplitCreatesTwoHandsPlayedSequentially) {
   bool tested = false;
   for (int i = 0; i < 500 && !tested; i++) {
     game.startRound();
-    if (!game.isRoundComplete() && game.getPlayerHand().canSplit()) {
+    // Split aces finish the round on the spot; covered by SplitAcesTakeOneCardEach.
+    if (!game.isRoundComplete() && game.getPlayerHand().canSplit() &&
+        !game.getPlayerHand().getCards()[0].isAce()) {
       bool ok = game.split();
       ASSERT_TRUE(ok);
       EXPECT_FALSE(game.isRoundComplete());
@@ -582,10 +584,11 @@ TEST_F(BlackjackGameTest, SplitOutcomesForEachHand) {
       EXPECT_TRUE(game.isRoundComplete());
       const std::vector<Outcome>& outcomes = game.getOutcomes();
       ASSERT_EQ(outcomes.size(), 2u);
+      // No PLAYER_BLACKJACK: a split hand cannot make a natural.
       for (Outcome o : outcomes) {
         EXPECT_TRUE(o == Outcome::PLAYER_WIN || o == Outcome::DEALER_WIN ||
                     o == Outcome::PUSH || o == Outcome::PLAYER_BUST ||
-                    o == Outcome::DEALER_BUST || o == Outcome::PLAYER_BLACKJACK);
+                    o == Outcome::DEALER_BUST);
       }
       EXPECT_EQ(game.getOutcome(), outcomes[0]);
       tested = true;
@@ -623,6 +626,55 @@ TEST_F(BlackjackGameTest, SplitFirstHandBustThenSecondHandPlayed) {
     game.reset();
   }
   EXPECT_TRUE(tested);
+}
+
+TEST_F(BlackjackGameTest, SplitAcesTakeOneCardEach) {
+  // A,A is dealt about once per 170 rounds in a six-deck shoe; 30,000 seeded
+  // rounds make missing it impossible in practice and the test deterministic.
+  BlackjackGame seeded(GameRules::vegasStrip(), 2024u);
+  bool tested = false;
+  for (int i = 0; i < 30000 && !tested; ++i) {
+    seeded.startRound();
+    const Hand &hand = seeded.getPlayerHand();
+    if (seeded.isRoundComplete() || !seeded.canSplit() ||
+        !hand.getCards()[0].isAce()) {
+      continue;
+    }
+    ASSERT_TRUE(seeded.split());
+    EXPECT_TRUE(seeded.isRoundComplete());
+    ASSERT_EQ(seeded.getPlayerHands().size(), 2u);
+    for (const Hand &h : seeded.getPlayerHands()) {
+      EXPECT_EQ(h.size(), 2u);
+    }
+    EXPECT_EQ(seeded.getOutcomes().size(), 2u);
+    tested = true;
+  }
+  EXPECT_TRUE(tested);
+}
+
+TEST_F(BlackjackGameTest, TwentyOneAfterSplitIsNotANatural) {
+  // Split every pair and stand; any split hand that lands on a two-card 21
+  // must settle as an ordinary result, never PLAYER_BLACKJACK. A+T after a
+  // split used to pay 3:2.
+  BlackjackGame seeded(GameRules::vegasStrip(), 77u);
+  int twoCardTwentyOnes = 0;
+  for (int i = 0; i < 30000 && twoCardTwentyOnes < 20; ++i) {
+    seeded.startRound();
+    if (seeded.isRoundComplete() || !seeded.canSplit()) continue;
+    seeded.split();
+    while (!seeded.isRoundComplete()) seeded.stand();
+
+    const auto &hands = seeded.getPlayerHands();
+    const auto &outcomes = seeded.getOutcomes();
+    ASSERT_EQ(hands.size(), outcomes.size());
+    for (size_t h = 0; h < hands.size(); ++h) {
+      EXPECT_NE(outcomes[h], Outcome::PLAYER_BLACKJACK);
+      if (hands[h].size() == 2 && hands[h].getTotal() == 21) {
+        ++twoCardTwentyOnes;
+      }
+    }
+  }
+  EXPECT_GT(twoCardTwentyOnes, 0);
 }
 
 // === Surrender Tests (Feature 2) ===

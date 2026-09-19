@@ -144,6 +144,13 @@ bool BlackjackGame::split() {
   splitUsed_ = true;
   currentHandIndex_ = 0;
 
+  // Split aces take exactly one card each, as at a casino table. Letting them
+  // draw turned every split ace into a free soft hand and inflated the
+  // player's edge, the book baseline's included.
+  if (playerHands_[0].getCards()[0].isAce()) {
+    finishRoundAndResolveOutcomes();
+  }
+
   return true;
 }
 
@@ -239,7 +246,9 @@ void BlackjackGame::playDealerHand() {
 }
 
 Outcome BlackjackGame::determineOutcome(const Hand &playerHand) const {
-  bool playerBlackjack = playerHand.isBlackjack();
+  // Only an unsplit two-card 21 is a natural. A+T after a split is an ordinary
+  // 21: it pays 1:1, not 3:2, and pushes against a dealer 21.
+  bool playerBlackjack = playerHand.isBlackjack() && playerHands_.size() == 1;
   bool dealerBlackjack = dealerHand_.isBlackjack();
 
   if (playerBlackjack && dealerBlackjack) {

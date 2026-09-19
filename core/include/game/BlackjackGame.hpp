@@ -22,7 +22,9 @@ namespace blackjack {
     std::string outcomeToString(Outcome outcome);
 
     /** Single-player vs dealer; manages state, rules, and dealer play.
-     *  Supports one split per round (no resplit); hands played sequentially. */
+     *  Supports one split per round (no resplit); hands played sequentially.
+     *  Split aces receive one card each and a 21 after a split is not a
+     *  natural. No double after split. */
     class BlackjackGame {
     public:
         explicit BlackjackGame(const GameRules& rules = GameRules{},
@@ -36,7 +38,8 @@ namespace blackjack {
         /** @return true if action was applied. */
         bool doubleDown();
 
-        /** @return true if split was performed (one split only, no resplit). */
+        /** @return true if split was performed (one split only, no resplit).
+         *  Splitting aces deals one card to each and completes the round. */
         bool split();
 
         /** @return true if surrender was applied (only on first two cards; gated by rules.surrender). */
@@ -55,6 +58,9 @@ namespace blackjack {
 
         /** Current hand (single hand index when multiple hands). */
         const Hand& getPlayerHand() const;
+
+        /** Every player hand this round: one, or two after a split. */
+        const std::vector<Hand>& getPlayerHands() const { return playerHands_; }
 
         /** hideHoleCard: true to show only upcard (e.g. during player turn). */
         Hand getDealerHand(bool hideHoleCard = false) const;

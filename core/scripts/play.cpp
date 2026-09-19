@@ -378,7 +378,11 @@ void playHumanMode(BlackjackGame &game, int numHands, bool beginnerMode) {
         const auto &outcomes   = game.getOutcomes();
         const auto &wasDoubled = game.getWasDoubledByHand();
         for (size_t i = 0; i < outcomes.size(); ++i) {
-            if (outcomes.size() > 1) std::cout << "Hand " << (i + 1) << ": ";
+            // Split hands can finish without a decision (split aces draw one
+            // card each), so show every hand's cards at showdown.
+            if (outcomes.size() > 1)
+                displayHand("Hand " + std::to_string(i + 1), game.getPlayerHands()[i],
+                            true, beginnerMode);
             Outcome o    = outcomes[i];
             bool doubled = (i < wasDoubled.size()) && wasDoubled[i];
             bool isWin   = (o == Outcome::PLAYER_WIN || o == Outcome::PLAYER_BLACKJACK || o == Outcome::DEALER_BUST);
@@ -499,6 +503,9 @@ void playAIMode(BlackjackGame &game, QLearningAgent &agent, int numHands, bool b
         const auto &outcomes   = game.getOutcomes();
         const auto &wasDoubled = game.getWasDoubledByHand();
         for (size_t i = 0; i < outcomes.size(); ++i) {
+            if (outcomes.size() > 1)
+                displayHand("Hand " + std::to_string(i + 1), game.getPlayerHands()[i],
+                            true, beginnerMode);
             Outcome o       = outcomes[i];
             bool    doubled = (i < wasDoubled.size()) && wasDoubled[i];
             double  reward  = GameStateConverter::outcomeToReward(
@@ -654,7 +661,11 @@ void playAdvisorMode(BlackjackGame &game, QLearningAgent &agent, int numHands, b
         const auto &outcomes   = game.getOutcomes();
         const auto &wasDoubled = game.getWasDoubledByHand();
         for (size_t i = 0; i < outcomes.size(); ++i) {
-            if (outcomes.size() > 1) std::cout << "Hand " << (i + 1) << ": ";
+            // Split hands can finish without a decision (split aces draw one
+            // card each), so show every hand's cards at showdown.
+            if (outcomes.size() > 1)
+                displayHand("Hand " + std::to_string(i + 1), game.getPlayerHands()[i],
+                            true, beginnerMode);
             Outcome o    = outcomes[i];
             bool doubled = (i < wasDoubled.size()) && wasDoubled[i];
             bool isWin   = (o == Outcome::PLAYER_WIN || o == Outcome::PLAYER_BLACKJACK || o == Outcome::DEALER_BUST);
