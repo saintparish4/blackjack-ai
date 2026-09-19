@@ -203,6 +203,24 @@ std::vector<ai::Action> legalActionsFor(const ai::State &state,
 std::vector<AuditState> buildAuditStates(const GameRules &rules,
                                          HandContext context) {
   std::vector<AuditState> states;
+
+  if (context == HandContext::Pair) {
+    // One opening pair per rank (A = 1, ten-value = 10) and upcard. A,A is
+    // the only soft pair; every other pair totals twice its rank.
+    for (int rank = 1; rank <= 10; ++rank) {
+      for (int dealerCard = 1; dealerCard <= 10; ++dealerCard) {
+        const bool aces = (rank == 1);
+        ai::State state(aces ? 12 : 2 * rank, dealerCard, aces,
+                        /*canSplit=*/true, /*canDouble=*/true);
+        AuditState entry;
+        entry.state = state;
+        entry.validActions = legalActionsFor(state, rules);
+        states.push_back(std::move(entry));
+      }
+    }
+    return states;
+  }
+
   const bool twoCard = (context == HandContext::TwoCard);
 
   for (int playerTotal = 4; playerTotal <= 21; ++playerTotal) {
@@ -406,9 +424,10 @@ double Evaluator::compareWithBasicStrategy(ai::Agent *agent) {
 PolicyAudit Evaluator::auditPolicy(ai::Agent *agent) {
   PolicyAudit audit;
 
-  for (HandContext context : {HandContext::TwoCard, HandContext::MultiCard}) {
-    ContextAudit &slot = (context == HandContext::TwoCard) ? audit.twoCard
-                                                           : audit.multiCard;
+  for (HandContext context : kAllHandContexts) {
+    ContextAudit &slot = context == HandContext::TwoCard   ? audit.twoCard
+                         : context == HandContext::MultiCard ? audit.multiCard
+                                                             : audit.pairs;
 
     for (const AuditState &entry : buildAuditStates(rules_, context)) {
       // An action the agent was never offered here still holds the Q-table's
@@ -438,8 +457,10 @@ PolicyAudit Evaluator::auditPolicy(ai::Agent *agent) {
     }
   }
 
-  const size_t scored = audit.twoCard.scored + audit.multiCard.scored;
-  const size_t matches = audit.twoCard.matches + audit.multiCard.matches;
+  const size_t scored =
+      audit.twoCard.scored + audit.multiCard.scored + audit.pairs.scored;
+  const size_t matches =
+      audit.twoCard.matches + audit.multiCard.matches + audit.pairs.matches;
   audit.accuracy = scored > 0 ? static_cast<double>(matches) / scored : 0.0;
   return audit;
 }

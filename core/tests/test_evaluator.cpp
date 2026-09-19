@@ -369,3 +369,35 @@ TEST_F(EvaluatorTest, CompareWithBasicStrategyIsDeterministic) {
 
   EXPECT_DOUBLE_EQ(accuracy1, accuracy2);
 }
+
+// === Pair audit ===
+
+TEST_F(EvaluatorTest, PairAuditCoversEveryPairAndOffersSplit) {
+  auto pairs = buildAuditStates(GameRules::vegasStrip(), HandContext::Pair);
+  ASSERT_EQ(pairs.size(), 100u); // ten ranks x ten upcards
+  for (const AuditState &entry : pairs) {
+    EXPECT_TRUE(entry.state.canSplit);
+    EXPECT_NE(std::find(entry.validActions.begin(), entry.validActions.end(),
+                        Action::SPLIT),
+              entry.validActions.end())
+        << entry.state.toString();
+  }
+}
+
+// An agent that splits every pair used to audit exactly like one that never
+// does, because no audited state could split. Book play splits 45 of the 100
+// pair cells (no double after split, S17), so a split-everything policy
+// scores 45% on pairs and the book scores 100%.
+TEST_F(EvaluatorTest, PairAuditCatchesOverSplitting) {
+  Evaluator vegas(GameRules::vegasStrip());
+
+  AlwaysSplitAgent splitter;
+  PolicyAudit splitAudit = vegas.auditPolicy(&splitter);
+  EXPECT_EQ(splitAudit.pairs.scored, 100u);
+  EXPECT_EQ(splitAudit.pairs.matches, 45u);
+
+  BasicStrategyAgent book(GameRules::vegasStrip());
+  PolicyAudit bookAudit = vegas.auditPolicy(&book);
+  EXPECT_EQ(bookAudit.pairs.matches, bookAudit.pairs.scored);
+  EXPECT_DOUBLE_EQ(bookAudit.accuracy, 1.0);
+}

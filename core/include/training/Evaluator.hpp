@@ -72,6 +72,7 @@ struct BaselineComparison {
 enum class HandContext {
   TwoCard,   ///< Opening hand: DOUBLE and SURRENDER are legal.
   MultiCard, ///< Already hit at least once: only HIT and STAND remain.
+  Pair,      ///< Opening pair: SPLIT is legal too. Scored against the pair chart.
 };
 
 /** One state a policy audit scores, paired with the actions legal there. */
@@ -101,8 +102,16 @@ struct ContextAudit {
 struct PolicyAudit {
   ContextAudit twoCard;
   ContextAudit multiCard;
-  double accuracy = 0.0; ///< Over all scored states in both contexts
+  /// Pairs were left out of the audit until an agent that over-split 27 of
+  /// 100 pair cells still scored well: the leak was invisible to it.
+  ContextAudit pairs;
+  double accuracy = 0.0; ///< Over all scored states in every context
 };
+
+/** All three contexts, in reporting order. */
+constexpr HandContext kAllHandContexts[] = {HandContext::TwoCard,
+                                            HandContext::MultiCard,
+                                            HandContext::Pair};
 
 /**
  * @brief Actions the rules permit in this state.

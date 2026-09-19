@@ -103,6 +103,86 @@ void StrategyChart::print(ai::Agent &agent, const BasicStrategy &basicStrategy,
     out << "\n--- Soft Totals ---\n";
   }
   printGrid(agent, basicStrategy, true, out, forceNoColor, allowSurrender);
+
+  if (useColor) {
+    out << "\n" << BOLD << "--- Pairs ---" << RESET << "\n";
+  } else {
+    out << "\n--- Pairs ---\n";
+  }
+  printPairGrid(agent, basicStrategy, out, forceNoColor, allowSurrender);
+}
+
+namespace {
+const int kDealerCards[] = {2, 3, 4, 5, 6, 7, 8, 9, 10, 1};
+const char *kDealerLabels[] = {"2", "3", "4", "5", "6", "7", "8", "9", "T", "A"};
+} // namespace
+
+void StrategyChart::printHeader(std::ostream &out) {
+  out << std::setw(6) << "";
+  for (const char *label : kDealerLabels) {
+    out << std::setw(3) << label;
+  }
+  out << "\n";
+}
+
+void StrategyChart::printCell(ai::Agent &agent,
+                              const BasicStrategy &basicStrategy,
+                              const ai::State &state, std::ostream &out,
+                              bool useColor, bool allowSurrender) const {
+  std::vector<ai::Action> valid = validActionsForState(state, allowSurrender);
+
+  for (ai::Action action : valid) {
+    if (agent.getVisitCount(state, action) == 0) {
+      // Never learned here: any argmax would just report Q-table
+      // initialisation order.
+      out << "  " << '.';
+      return;
+    }
+  }
+
+  ai::Action agentAction = agent.chooseAction(state, valid, false);
+  bool matches = basicStrategy.isCorrectAction(state, agentAction, allowSurrender);
+  double margin = computeMargin(agent, state, valid);
+  char ch = actionChar(agentAction);
+
+  if (useColor) {
+    const char *color;
+    if (matches) {
+      color = GREEN;
+    } else if (margin < marginThreshold_) {
+      color = YELLOW;
+    } else {
+      color = RED;
+    }
+    out << "  " << color << ch << RESET;
+  } else {
+    // Plain text: lowercase = diverges, uppercase = matches
+    if (!matches)
+      ch = static_cast<char>(ch + 32); // lowercase
+    out << "  " << ch;
+  }
+}
+
+void StrategyChart::printPairGrid(ai::Agent &agent,
+                                  const BasicStrategy &basicStrategy,
+                                  std::ostream &out, bool forceNoColor,
+                                  bool allowSurrender) const {
+  bool useColor = !forceNoColor && isTerminal();
+  printHeader(out);
+  // Same row order as a printed chart: A,A first, then tens down to deuces.
+  const int ranks[] = {1, 10, 9, 8, 7, 6, 5, 4, 3, 2};
+  for (int rank : ranks) {
+    const std::string label =
+        rank == 1 ? "A,A" : rank == 10 ? "T,T" : std::to_string(rank) + "," + std::to_string(rank);
+    out << std::setw(5) << label << " ";
+    for (int dealerCard : kDealerCards) {
+      const bool aces = (rank == 1);
+      ai::State state(aces ? 12 : 2 * rank, dealerCard, aces, /*canSplit=*/true,
+                      /*canDouble=*/true);
+      printCell(agent, basicStrategy, state, out, useColor, allowSurrender);
+    }
+    out << "\n";
+  }
 }
 
 void StrategyChart::printGrid(ai::Agent &agent,
@@ -111,69 +191,20 @@ void StrategyChart::printGrid(ai::Agent &agent,
                               bool forceNoColor, bool allowSurrender) const {
   bool useColor = !forceNoColor && isTerminal();
 
-  // Dealer upcards: 2,3,4,5,6,7,8,9,10,A
-  // Display header
-  out << std::setw(6) << "";
-  const int dealerCards[] = {2, 3, 4, 5, 6, 7, 8, 9, 10, 1};
-  const char *dealerLabels[] = {"2", "3", "4", "5", "6",
-                                "7", "8", "9", "T", "A"};
-  for (int i = 0; i < 10; ++i) {
-    out << std::setw(3) << dealerLabels[i];
-  }
-  out << "\n";
+  printHeader(out);
 
-  // Row range
   int rowStart = softTotals ? 13 : 4;
-  int rowEnd = softTotals ? 21 : 21;
+  int rowEnd = 21;
 
   for (int playerTotal = rowStart; playerTotal <= rowEnd; ++playerTotal) {
-    // Skip soft totals > 21 or invalid
     out << std::setw(5) << playerTotal << " ";
-    for (int i = 0; i < 10; ++i) {
-      int dealerCard = dealerCards[i];
+    for (int dealerCard : kDealerCards) {
       // A strategy chart describes the opening hand, where doubling is legal.
       // Rendering the canDouble=false slot shows the already-hit policy, in
       // which DOUBLE is untrainable and every double cell reads as a hit.
       ai::State state(playerTotal, dealerCard, softTotals, /*canSplit=*/false,
                       /*canDouble=*/true);
-
-      std::vector<ai::Action> valid = validActionsForState(state, allowSurrender);
-
-      bool trained = true;
-      for (ai::Action action : valid) {
-        if (agent.getVisitCount(state, action) == 0) {
-          trained = false;
-          break;
-        }
-      }
-      if (!trained) {
-        // Never learned here: any argmax would just report Q-table
-        // initialisation order.
-        out << "  " << '.';
-        continue;
-      }
-
-      ai::Action agentAction = agent.chooseAction(state, valid, false);
-      bool matches = basicStrategy.isCorrectAction(state, agentAction, allowSurrender);
-      double margin = computeMargin(agent, state, valid);
-      char ch = actionChar(agentAction);
-
-      if (useColor) {
-        const char *color;
-        if (matches) {
-          color = GREEN;
-        } else if (margin < marginThreshold_) {
-          color = YELLOW;
-        } else {
-          color = RED;
-        }
-        out << "  " << color << ch << RESET;
-      } else {
-        // Plain text: lowercase = diverges, uppercase = matches
-        if (!matches)
-          ch = static_cast<char>(ch + 32); // lowercase
-        out << "  " << ch;
-      }
+      printCell(agent, basicStrategy, state, out, useColor, allowSurrender);
     }
     out << "\n";
   }

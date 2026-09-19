@@ -28,9 +28,10 @@ ConvergenceResult ConvergenceReport::analyze(ai::Agent& agent,
     GameRules rules;
     rules.surrender = allowSurrender;
 
-    for (HandContext context : {HandContext::TwoCard, HandContext::MultiCard}) {
-        ContextAudit& slot = (context == HandContext::TwoCard) ? result.twoCard
-                                                               : result.multiCard;
+    for (HandContext context : kAllHandContexts) {
+        ContextAudit& slot = context == HandContext::TwoCard   ? result.twoCard
+                           : context == HandContext::MultiCard ? result.multiCard
+                                                               : result.pairs;
 
         for (const AuditState& entry : buildAuditStates(rules, context)) {
             // Skip states where some legal action was never trained: its Q is
@@ -59,7 +60,12 @@ ConvergenceResult ConvergenceReport::analyze(ai::Agent& agent,
                 Divergence div;
                 div.state         = entry.state;
                 div.agentAction   = agentAction;
+                // Show the play actually available: on a hand that has
+                // already hit, the book's DOUBLE means its fallback.
                 div.optimalAction = basicStrategy.getAction(entry.state, allowSurrender);
+                if (div.optimalAction == ai::Action::DOUBLE && !entry.state.canDouble) {
+                    div.optimalAction = basicStrategy.fallbackWhenCannotDouble(entry.state);
+                }
                 div.qMargin       = computeQMargin(agent, entry.state, entry.validActions);
                 div.isCritical    = isCriticalState(entry.state);
                 div.context       = context;
@@ -68,9 +74,12 @@ ConvergenceResult ConvergenceReport::analyze(ai::Agent& agent,
         }
     }
 
-    result.totalStates     = result.twoCard.scored + result.multiCard.scored;
-    result.matchingStates  = result.twoCard.matches + result.multiCard.matches;
-    result.untrainedStates = result.twoCard.untrained + result.multiCard.untrained;
+    result.totalStates     = result.twoCard.scored + result.multiCard.scored +
+                             result.pairs.scored;
+    result.matchingStates  = result.twoCard.matches + result.multiCard.matches +
+                             result.pairs.matches;
+    result.untrainedStates = result.twoCard.untrained + result.multiCard.untrained +
+                             result.pairs.untrained;
 
     result.accuracy = result.totalStates > 0
         ? static_cast<double>(result.matchingStates) / result.totalStates
@@ -102,6 +111,10 @@ void ConvergenceReport::print(const ConvergenceResult& result,
         << (result.multiCard.accuracy() * 100) << "% ("
         << result.multiCard.matches << "/" << result.multiCard.scored
         << ")  -- hit/stand only\n";
+    out << "  pairs           : " << std::setprecision(1)
+        << (result.pairs.accuracy() * 100) << "% ("
+        << result.pairs.matches << "/" << result.pairs.scored
+        << ")  -- split or play the total\n";
     out << "Threshold         : " << (passingThreshold_ * 100) << "%\n";
     out << "Status            : " << (result.passed ? "PASS ✓" : "FAIL ✗") << "\n";
     if (result.untrainedStates > 0) {
@@ -137,14 +150,7 @@ void ConvergenceReport::print(const ConvergenceResult& result,
 
     for (size_t i = 0; i < shown; ++i) {
         const Divergence& d = result.divergences[i];
-        int  dc  = d.state.dealerUpCard;
-        std::string dealerStr = (dc == 1) ? "A" : std::to_string(dc);
-        std::string stateStr  = (d.state.hasUsableAce ? "soft " : "hard ")
-                              + std::to_string(d.state.playerTotal)
-                              + " vs " + dealerStr
-                              + " [" + contextName(d.context) + "]";
-
-        out << std::left  << std::setw(26) << stateStr
+        out << std::left  << std::setw(26) << describe(d)
             << std::setw(12) << ai::actionToString(d.agentAction)
             << std::setw(12) << ai::actionToString(d.optimalAction)
             << std::right << std::fixed << std::setw(9) << std::setprecision(4) << d.qMargin
@@ -157,13 +163,7 @@ void ConvergenceReport::print(const ConvergenceResult& result,
         out << "\nCritical divergences:\n";
         for (const auto& d : result.divergences) {
             if (!d.isCritical) continue;
-            int  dc  = d.state.dealerUpCard;
-            std::string dealerStr = (dc == 1) ? "A" : std::to_string(dc);
-            std::string stateStr  = (d.state.hasUsableAce ? "soft " : "hard ")
-                                  + std::to_string(d.state.playerTotal)
-                                  + " vs " + dealerStr
-                                  + " [" + contextName(d.context) + "]";
-            out << "  " << std::left << std::setw(24) << stateStr
+            out << "  " << std::left << std::setw(24) << describe(d)
                 << " agent=" << std::setw(9) << ai::actionToString(d.agentAction)
                 << " optimal=" << std::setw(9) << ai::actionToString(d.optimalAction)
                 << " margin=" << std::fixed << std::setprecision(4) << d.qMargin
@@ -208,7 +208,27 @@ double ConvergenceReport::computeQMargin(ai::Agent& agent,
 }
 
 const char* ConvergenceReport::contextName(HandContext context) {
-    return context == HandContext::TwoCard ? "2card" : "multi";
+    switch (context) {
+    case HandContext::TwoCard:   return "2card";
+    case HandContext::MultiCard: return "multi";
+    case HandContext::Pair:      return "pair";
+    }
+    return "?";
+}
+
+std::string ConvergenceReport::describe(const Divergence& d) {
+    const int dc = d.state.dealerUpCard;
+    const std::string dealer = (dc == 1) ? "A" : (dc == 10 ? "T" : std::to_string(dc));
+    std::string hand;
+    if (d.context == HandContext::Pair) {
+        const int rank = d.state.hasUsableAce ? 1 : d.state.playerTotal / 2;
+        hand = "pair " + std::string(rank == 1 ? "A" : rank == 10 ? "T"
+                                                      : std::to_string(rank)) + "s";
+    } else {
+        hand = (d.state.hasUsableAce ? "soft " : "hard ") +
+               std::to_string(d.state.playerTotal);
+    }
+    return hand + " vs " + dealer + " [" + contextName(d.context) + "]";
 }
 
 } // namespace training

@@ -51,6 +51,8 @@ const std::vector<Metric> &metrics() {
        [](const SeedResult &r) { return r.audit.twoCard.accuracy(); }},
       {"multi_card_accuracy", "multi-card accuracy %", 100.0,
        [](const SeedResult &r) { return r.audit.multiCard.accuracy(); }},
+      {"pair_accuracy", "pair accuracy %", 100.0,
+       [](const SeedResult &r) { return r.audit.pairs.accuracy(); }},
   };
   return m;
 }
@@ -134,7 +136,8 @@ void writeResultsCsv(const std::string &path,
   openForWrite(file, path);
   file << "seed,episodes,agent_ev,agent_se,book_ev,book_se,random_ev,random_se,"
           "gap_recovered,accuracy,two_card_accuracy,multi_card_accuracy,"
-          "two_card_scored,multi_card_scored,unscored_states,states_learned\n";
+          "pair_accuracy,two_card_scored,multi_card_scored,pair_scored,"
+          "unscored_states,states_learned\n";
   file << std::fixed << std::setprecision(6);
   for (const auto &r : results) {
     file << r.seed << "," << r.episodes << "," << r.cmp.agent.avgReward << ","
@@ -142,10 +145,12 @@ void writeResultsCsv(const std::string &path,
          << r.cmp.book.rewardStdErr << "," << r.cmp.random.avgReward << ","
          << r.cmp.random.rewardStdErr << "," << r.cmp.gapRecovered << ","
          << r.audit.accuracy << "," << r.audit.twoCard.accuracy() << ","
-         << r.audit.multiCard.accuracy() << "," << r.audit.twoCard.scored << ","
-         << r.audit.multiCard.scored << ","
-         << (r.audit.twoCard.untrained + r.audit.multiCard.untrained) << ","
-         << r.statesLearned << "\n";
+         << r.audit.multiCard.accuracy() << "," << r.audit.pairs.accuracy() << ","
+         << r.audit.twoCard.scored << "," << r.audit.multiCard.scored << ","
+         << r.audit.pairs.scored << ","
+         << (r.audit.twoCard.untrained + r.audit.multiCard.untrained +
+             r.audit.pairs.untrained)
+         << "," << r.statesLearned << "\n";
   }
 }
 
@@ -171,8 +176,8 @@ void printResultsTable(const std::vector<SeedResult> &results,
       << std::setw(22) << "agent EV (95% CI)" << std::setw(10) << "book EV"
       << std::setw(10) << "random" << std::setw(8) << "gap %" << std::setw(8)
       << "acc %" << std::setw(8) << "2-card" << std::setw(8) << "multi"
-      << "\n";
-  out << std::string(90, '-') << "\n";
+      << std::setw(8) << "pairs" << "\n";
+  out << std::string(98, '-') << "\n";
   for (const auto &r : results) {
     out << std::fixed << std::setw(6) << r.seed << std::setw(10) << r.episodes
         << std::setprecision(4) << std::setw(12) << r.cmp.agent.avgReward
@@ -182,7 +187,8 @@ void printResultsTable(const std::vector<SeedResult> &results,
         << (r.cmp.gapRecovered * 100) << std::setw(8)
         << (r.audit.accuracy * 100) << std::setw(8)
         << (r.audit.twoCard.accuracy() * 100) << std::setw(8)
-        << (r.audit.multiCard.accuracy() * 100) << "\n";
+        << (r.audit.multiCard.accuracy() * 100) << std::setw(8)
+        << (r.audit.pairs.accuracy() * 100) << "\n";
   }
 
   out << "\nAcross " << results.size() << " seed(s)   "

@@ -49,6 +49,18 @@ private:
                  bool softTotals, std::ostream &out,
                  bool forceNoColor = false,
                  bool allowSurrender = true) const;
+
+  // Opening pairs, where SPLIT is on offer. Split mistakes were invisible in
+  // the hard/soft grids, which only show hands that cannot split.
+  void printPairGrid(ai::Agent &agent, const BasicStrategy &basicStrategy,
+                     std::ostream &out, bool forceNoColor,
+                     bool allowSurrender) const;
+
+  static void printHeader(std::ostream &out);
+
+  void printCell(ai::Agent &agent, const BasicStrategy &basicStrategy,
+                 const ai::State &state, std::ostream &out, bool useColor,
+                 bool allowSurrender) const;
 };
 
 } // namespace training

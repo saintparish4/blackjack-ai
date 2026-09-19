@@ -4,6 +4,7 @@
 #include "../ai/State.hpp"
 #include "Evaluator.hpp"
 #include <iostream>
+#include <string>
 #include <vector>
 
 namespace blackjack {
@@ -32,6 +33,7 @@ struct ConvergenceResult {
     /// blended accuracy hides which one is actually failing.
     ContextAudit twoCard;
     ContextAudit multiCard;
+    ContextAudit pairs;
 
     /// States skipped because some legal action there never received a learning
     /// update. Their argmax reflects Q-table initialisation, not a policy.
@@ -92,6 +94,9 @@ private:
 
     /** Report label for a hand context. */
     static const char* contextName(HandContext context);
+
+    /** "hard 16 vs T [2card]", "pair 8s vs A [pair]", ... */
+    static std::string describe(const Divergence& d);
 };
 
 } // namespace training
