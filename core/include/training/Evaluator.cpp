@@ -4,20 +4,29 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <set>
 
 namespace blackjack {
 namespace training {
 // === BasicStrategy Implementation ===
+//
+// Multi-deck, total-dependent basic strategy for the rules this engine plays:
+// dealer peeks for blackjack, one split, split aces take one card, and no
+// double after split. S17 and H17 differ in a handful of cells, taken from
+// rules.dealerHitsSoft17. Dealer upcards are keyed 2-11 (ace = 11).
+//
+// An earlier, simplified chart had no soft doubles and split pairs as if
+// double-after-split were allowed. That weakened the book baseline every EV
+// figure is measured against, and marked an agent wrong for doubling soft 17
+// against a 4.
 
-BasicStrategy::BasicStrategy() {
-  initializeHardStrategy();
-  initializeSoftStrategy();
+BasicStrategy::BasicStrategy(const GameRules &rules) {
+  const bool h17 = rules.dealerHitsSoft17;
+  initializeHardStrategy(h17);
+  initializeSoftStrategy(h17);
   initializePairStrategy();
 }
 
-// Pair plays for 6-deck, dealer stands soft 17, double-after-split allowed.
-// Keyed by the rank held twice (A = 1, ten-value = 10). Entries not listed
-// here are never split; the caller falls back to the hard/soft table.
 void BasicStrategy::initializePairStrategy() {
   auto splitVs = [&](int rank, std::initializer_list<int> dealers) {
     for (int d : dealers) {
@@ -29,106 +38,79 @@ void BasicStrategy::initializePairStrategy() {
   splitVs(8, {2, 3, 4, 5, 6, 7, 8, 9, 10, 11}); // 8,8: always
   splitVs(9, {2, 3, 4, 5, 6, 8, 9});            // 9,9: not vs 7, 10 or A
   splitVs(7, {2, 3, 4, 5, 6, 7});
-  splitVs(6, {2, 3, 4, 5, 6});
-  splitVs(4, {5, 6});
-  splitVs(3, {2, 3, 4, 5, 6, 7});
-  splitVs(2, {2, 3, 4, 5, 6, 7});
-  // 5,5 is played as a hard 10 (double), never split.
-  // 10,10 stands.
+  // Without double after split the small pairs lose their weakest splits:
+  // 6,6 vs 2, 3,3 and 2,2 vs 2-3, and 4,4 entirely.
+  splitVs(6, {3, 4, 5, 6});
+  splitVs(3, {4, 5, 6, 7});
+  splitVs(2, {4, 5, 6, 7});
+  // 5,5 is played as a hard 10 (double), 4,4 as a hard 8, 10,10 stands.
 }
 
-void BasicStrategy::initializeHardStrategy() {
-  // Hard totals strategy (player total, dealer up card) -> Action
-  // Based on mathematically optimal basic strategy
-
-  // Always hit on 8 or less
+void BasicStrategy::initializeHardStrategy(bool h17) {
   for (int dealer = 2; dealer <= 11; ++dealer) {
-    for (int player = 4; player <= 8; ++player) {
-      hardStrategy_[{player, dealer}] = ai::Action::HIT;
-    }
-  }
-
-  // 9: Double vs 3-6, else hit
-  for (int dealer = 2; dealer <= 11; ++dealer) {
-    if (dealer >= 3 && dealer <= 6) {
-      hardStrategy_[{9, dealer}] = ai::Action::DOUBLE;
-    } else {
-      hardStrategy_[{9, dealer}] = ai::Action::HIT;
-    }
-  }
-
-  // 10: Double vs 2-9, else hit
-  for (int dealer = 2; dealer <= 11; ++dealer) {
-    if (dealer >= 2 && dealer <= 9) {
-      hardStrategy_[{10, dealer}] = ai::Action::DOUBLE;
-    } else {
-      hardStrategy_[{10, dealer}] = ai::Action::HIT;
-    }
-  }
-
-  // 11: Always double
-  for (int dealer = 2; dealer <= 11; ++dealer) {
-    hardStrategy_[{11, dealer}] = ai::Action::DOUBLE;
-  }
-
-  // 12: Hit vs 2-3 and 7-A, stand vs 4-6
-  for (int dealer = 2; dealer <= 11; ++dealer) {
-    if (dealer >= 4 && dealer <= 6) {
-      hardStrategy_[{12, dealer}] = ai::Action::STAND;
-    } else {
-      hardStrategy_[{12, dealer}] = ai::Action::HIT;
-    }
-  }
-
-  // 13-16: Stand vs 2-6, hit vs 7-A (surrender overrides below for 15/16)
-  for (int player = 13; player <= 16; ++player) {
-    for (int dealer = 2; dealer <= 11; ++dealer) {
-      if (dealer >= 2 && dealer <= 6) {
-        hardStrategy_[{player, dealer}] = ai::Action::STAND;
+    for (int player = 4; player <= 21; ++player) {
+      ai::Action a;
+      if (player <= 8) {
+        a = ai::Action::HIT;
+      } else if (player == 9) {
+        a = (dealer >= 3 && dealer <= 6) ? ai::Action::DOUBLE : ai::Action::HIT;
+      } else if (player == 10) {
+        a = (dealer <= 9) ? ai::Action::DOUBLE : ai::Action::HIT;
+      } else if (player == 11) {
+        // Against an ace, doubling 11 only pays when the dealer hits soft 17.
+        a = (dealer <= 10 || h17) ? ai::Action::DOUBLE : ai::Action::HIT;
+      } else if (player == 12) {
+        a = (dealer >= 4 && dealer <= 6) ? ai::Action::STAND : ai::Action::HIT;
+      } else if (player <= 16) {
+        a = (dealer <= 6) ? ai::Action::STAND : ai::Action::HIT;
       } else {
-        hardStrategy_[{player, dealer}] = ai::Action::HIT;
+        a = ai::Action::STAND;
       }
+      hardStrategy_[{player, dealer}] = a;
     }
   }
-  // Surrender: hard 15 vs 10, hard 16 vs 9/10/A
-  hardStrategy_[{15, 10}] = ai::Action::SURRENDER;
-  hardStrategy_[{16, 9}] = ai::Action::SURRENDER;
-  hardStrategy_[{16, 10}] = ai::Action::SURRENDER;
-  hardStrategy_[{16, 11}] = ai::Action::SURRENDER;
 
-  // 17+: Always stand
-  for (int player = 17; player <= 21; ++player) {
-    for (int dealer = 2; dealer <= 11; ++dealer) {
-      hardStrategy_[{player, dealer}] = ai::Action::STAND;
-    }
+  // Late surrender, applied on top when the rules offer it.
+  surrender_.insert({15, 10});
+  surrender_.insert({16, 9});
+  surrender_.insert({16, 10});
+  surrender_.insert({16, 11});
+  if (h17) {
+    surrender_.insert({15, 11});
+    surrender_.insert({17, 11});
   }
 }
 
-void BasicStrategy::initializeSoftStrategy() {
-  // Soft totals strategy (Ace counted as 11)
+void BasicStrategy::initializeSoftStrategy(bool h17) {
+  auto doubleVs = [&](int total, int lo, int hi) {
+    for (int d = lo; d <= hi; ++d) softStrategy_[{total, d}] = ai::Action::DOUBLE;
+  };
 
-  // Soft 13-17: Hit vs 2-6, hit vs 7-A (simplified)
-  // In reality, some soft hands double, but we'll use simplified version
-  for (int player = 13; player <= 17; ++player) {
+  for (int player = 12; player <= 21; ++player) {
     for (int dealer = 2; dealer <= 11; ++dealer) {
-      softStrategy_[{player, dealer}] = ai::Action::HIT;
+      softStrategy_[{player, dealer}] =
+          (player <= 17) ? ai::Action::HIT : ai::Action::STAND;
     }
   }
 
-  // Soft 18: Stand vs 2-8, hit vs 9-A
-  for (int dealer = 2; dealer <= 11; ++dealer) {
-    if (dealer <= 8) {
-      softStrategy_[{18, dealer}] = ai::Action::STAND;
-    } else {
-      softStrategy_[{18, dealer}] = ai::Action::HIT;
-    }
-  }
+  doubleVs(13, 5, 6); // A,2
+  doubleVs(14, 5, 6); // A,3
+  doubleVs(15, 4, 6); // A,4
+  doubleVs(16, 4, 6); // A,5
+  doubleVs(17, 3, 6); // A,6
 
-  // Soft 19+: Always stand
-  for (int player = 19; player <= 21; ++player) {
-    for (int dealer = 2; dealer <= 11; ++dealer) {
-      softStrategy_[{player, dealer}] = ai::Action::STAND;
-    }
+  // Soft 18: double where it pays, otherwise stand, except against 9, T or
+  // ace, where hitting is better.
+  for (int dealer = 9; dealer <= 11; ++dealer) {
+    softStrategy_[{18, dealer}] = ai::Action::HIT;
+  }
+  for (int dealer = h17 ? 2 : 3; dealer <= 6; ++dealer) {
+    softStrategy_[{18, dealer}] = ai::Action::DOUBLE;
+    doubleElseStand_.insert({18, dealer});
+  }
+  if (h17) {
+    softStrategy_[{19, 6}] = ai::Action::DOUBLE;
+    doubleElseStand_.insert({19, 6});
   }
 }
 
@@ -139,7 +121,6 @@ ai::Action BasicStrategy::getAction(const ai::State &state,
     dealerCard = 11; // Convert ace to 11 for lookup
 
   auto key = std::make_pair(state.playerTotal, dealerCard);
-  ai::Action action;
 
   if (state.canSplit) {
     // A,A is the only pair that is also soft; every other pair totals 2x its
@@ -153,39 +134,42 @@ ai::Action BasicStrategy::getAction(const ai::State &state,
     }
   }
 
-  if (state.hasUsableAce) {
-    auto it = softStrategy_.find(key);
-    action = (it != softStrategy_.end())
-                 ? it->second
-                 : ((state.playerTotal < 17) ? ai::Action::HIT
-                                             : ai::Action::STAND);
-  } else {
-    auto it = hardStrategy_.find(key);
-    action = (it != hardStrategy_.end())
-                 ? it->second
-                 : ((state.playerTotal < 17) ? ai::Action::HIT
-                                             : ai::Action::STAND);
+  const auto &table = state.hasUsableAce ? softStrategy_ : hardStrategy_;
+  auto it = table.find(key);
+  if (it == table.end()) {
+    return state.playerTotal < 17 ? ai::Action::HIT : ai::Action::STAND;
   }
 
-  // Every state the table marks SURRENDER (hard 15 v 10, hard 16 v 9/10/A) is
-  // a hit under rules that do not offer it.
-  if (action == ai::Action::SURRENDER && !allowSurrender) {
-    return ai::Action::HIT;
+  // Surrender is a two-card decision (canDouble marks the opening hand).
+  // Recommending it on a hand that has already hit would mark every agent
+  // wrong on a play the rules never offered it.
+  if (allowSurrender && state.canDouble && !state.hasUsableAce &&
+      surrender_.count(key) > 0) {
+    return ai::Action::SURRENDER;
   }
-  return action;
+  return it->second;
+}
+
+ai::Action BasicStrategy::fallbackWhenCannotDouble(const ai::State &state) const {
+  int dealerCard = state.dealerUpCard == 1 ? 11 : state.dealerUpCard;
+  if (state.hasUsableAce &&
+      doubleElseStand_.count({state.playerTotal, dealerCard}) > 0) {
+    return ai::Action::STAND;
+  }
+  return ai::Action::HIT;
 }
 
 bool BasicStrategy::isCorrectAction(const ai::State &state, ai::Action action,
                                     bool allowSurrender) const {
   ai::Action optimalAction = getAction(state, allowSurrender);
 
-  // A hand that has already hit cannot double, so HIT is the correct play
-  // wherever the book says DOUBLE. On a two-card hand it is simply wrong:
-  // doubling 11 is the single highest-EV decision in the game, and accepting
-  // HIT there hides the agent's most expensive mistake.
-  if (optimalAction == ai::Action::DOUBLE && action == ai::Action::HIT &&
-      !state.canDouble) {
-    return true;
+  // A hand that has already hit cannot double, so the book's fallback is the
+  // correct play there: HIT for most doubles, STAND for soft 18 against a
+  // weak card. On a two-card hand it is simply wrong: doubling 11 is the
+  // single highest-EV decision in the game, and accepting HIT there hides the
+  // agent's most expensive mistake.
+  if (optimalAction == ai::Action::DOUBLE && !state.canDouble) {
+    return action == fallbackWhenCannotDouble(state);
   }
 
   return action == optimalAction;
@@ -255,10 +239,11 @@ ai::Action BasicStrategyAgent::chooseAction(
   if (legal(desired)) {
     return desired;
   }
-  // Book play unavailable here: doubling needs two cards, splitting needs a
-  // pair. Falling back to HIT matches how the chart is read at the table.
-  if (desired == ai::Action::DOUBLE && legal(ai::Action::HIT)) {
-    return ai::Action::HIT;
+  // Book play unavailable here: doubling needs two cards. The chart's
+  // fallback is HIT, or STAND on the "double, else stand" soft cells.
+  if (desired == ai::Action::DOUBLE) {
+    ai::Action fallback = strategy_.fallbackWhenCannotDouble(state);
+    if (legal(fallback)) return fallback;
   }
   if (desired == ai::Action::SURRENDER && legal(ai::Action::HIT)) {
     return ai::Action::HIT;
@@ -279,7 +264,7 @@ ai::Action RandomAgent::chooseAction(const ai::State &,
 // === Evaluator Implementation ===
 
 Evaluator::Evaluator(const GameRules &rules, std::optional<uint32_t> seed)
-    : rules_(rules), seed_(seed) {}
+    : rules_(rules), basicStrategy_(rules), seed_(seed) {}
 
 std::optional<uint32_t> Evaluator::nextDealSeed() {
   if (!seed_) {
@@ -397,7 +382,7 @@ BaselineComparison Evaluator::compareAgainstBaselines(ai::Agent *agent,
                                                       size_t rounds,
                                                       uint32_t baselineSeed) {
   BaselineComparison cmp;
-  BasicStrategyAgent bookAgent(rules_.surrender);
+  BasicStrategyAgent bookAgent(rules_);
   RandomAgent randomAgent(baselineSeed);
 
   cmp.agent = evaluate(agent, rounds, /*compareStrategy=*/false);

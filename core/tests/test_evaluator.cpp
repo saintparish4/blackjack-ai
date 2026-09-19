@@ -113,13 +113,14 @@ TEST_F(EvaluatorTest, SurrenderIsNotOfferedWhenRulesDisallowIt) {
   }
 
   // Book play for these states collapses to HIT without surrender available.
+  // Surrender is a two-card decision, so the states are opening hands.
   const BasicStrategy &book = strict.getBasicStrategy();
-  EXPECT_EQ(book.getAction(State(16, 10, false), /*allowSurrender=*/false),
-            Action::HIT);
-  EXPECT_EQ(book.getAction(State(15, 10, false), /*allowSurrender=*/false),
-            Action::HIT);
+  const State hard16vT(16, 10, false, /*canSplit=*/false, /*canDouble=*/true);
+  const State hard15vT(15, 10, false, /*canSplit=*/false, /*canDouble=*/true);
+  EXPECT_EQ(book.getAction(hard16vT, /*allowSurrender=*/false), Action::HIT);
+  EXPECT_EQ(book.getAction(hard15vT, /*allowSurrender=*/false), Action::HIT);
   // ...and remains SURRENDER when the rules do offer it.
-  EXPECT_EQ(book.getAction(State(16, 10, false), /*allowSurrender=*/true),
+  EXPECT_EQ(book.getAction(hard16vT, /*allowSurrender=*/true),
             Action::SURRENDER);
 }
 
@@ -202,7 +203,7 @@ TEST_F(EvaluatorTest, DoubleIsOfferedOnEveryTwoCardTotal) {
 
 TEST_F(EvaluatorTest, BasicStrategyBaselineOutperformsRandomPlay) {
   Evaluator eval(GameRules::vegasStrip());
-  BasicStrategyAgent book(/*allowSurrender=*/false);
+  BasicStrategyAgent book(GameRules{}); // surrender off, same rules as the evaluator
   RandomAgent chaos(/*seed=*/7);
 
   auto bookResult = eval.evaluate(&book, 20000, false);
@@ -240,8 +241,85 @@ TEST_F(EvaluatorTest, BasicStrategyStandOnHard20) {
 
 TEST_F(EvaluatorTest, BasicStrategySurrenderHard16VsDealer10) {
   const BasicStrategy &bs = evaluator.getBasicStrategy();
-  // With surrender, optimal play is surrender on hard 16 vs 10
-  EXPECT_EQ(bs.getAction(State(16, 10, false)), Action::SURRENDER);
+  // With surrender, optimal play is surrender on an opening hard 16 vs 10
+  EXPECT_EQ(bs.getAction(State(16, 10, false, false, /*canDouble=*/true)),
+            Action::SURRENDER);
+  // After hitting, surrender is no longer on offer, so the book play is HIT.
+  // Recommending SURRENDER there marked every agent wrong on these states.
+  EXPECT_EQ(bs.getAction(State(16, 10, false, false, /*canDouble=*/false)),
+            Action::HIT);
+}
+
+// === Full chart for this engine's rules ===
+
+TEST_F(EvaluatorTest, BasicStrategyDoublesSoftHandsAgainstWeakUpcards) {
+  BasicStrategy s17(GameRules::vegasStrip());
+  const State softSeventeenVs4(17, 4, true, false, /*canDouble=*/true);
+  const State softThirteenVs5(13, 5, true, false, true);
+  EXPECT_EQ(s17.getAction(softSeventeenVs4), Action::DOUBLE);
+  EXPECT_EQ(s17.getAction(softThirteenVs5), Action::DOUBLE);
+  EXPECT_EQ(s17.getAction(State(13, 4, true, false, true)), Action::HIT);
+
+  // Once the hand has hit, the soft-17 double becomes a hit.
+  const State threeCardSoft17(17, 4, true, false, /*canDouble=*/false);
+  EXPECT_TRUE(s17.isCorrectAction(threeCardSoft17, Action::HIT));
+  EXPECT_FALSE(s17.isCorrectAction(threeCardSoft17, Action::STAND));
+}
+
+TEST_F(EvaluatorTest, SoftEighteenDoublesElseStands) {
+  BasicStrategy s17(GameRules::vegasStrip());
+  EXPECT_EQ(s17.getAction(State(18, 5, true, false, true)), Action::DOUBLE);
+
+  // A multi-card soft 18 against a 5 stands. Treating every DOUBLE as HIT
+  // would call hitting it correct.
+  const State threeCard(18, 5, true, false, /*canDouble=*/false);
+  EXPECT_TRUE(s17.isCorrectAction(threeCard, Action::STAND));
+  EXPECT_FALSE(s17.isCorrectAction(threeCard, Action::HIT));
+
+  BasicStrategyAgent agent(GameRules::vegasStrip());
+  EXPECT_EQ(agent.chooseAction(threeCard, {Action::HIT, Action::STAND}, false),
+            Action::STAND);
+
+  // Soft 18 against 9, T and A still hits.
+  EXPECT_EQ(s17.getAction(State(18, 10, true, false, true)), Action::HIT);
+}
+
+TEST_F(EvaluatorTest, DealerSoft17RuleChangesTheChart) {
+  GameRules h17Rules = GameRules::vegasStrip();
+  h17Rules.dealerHitsSoft17 = true;
+  BasicStrategy s17(GameRules::vegasStrip());
+  BasicStrategy h17(h17Rules);
+
+  const State elevenVsAce(11, 1, false, false, true);
+  EXPECT_EQ(s17.getAction(elevenVsAce), Action::HIT);
+  EXPECT_EQ(h17.getAction(elevenVsAce), Action::DOUBLE);
+
+  const State softNineteenVs6(19, 6, true, false, true);
+  EXPECT_EQ(s17.getAction(softNineteenVs6), Action::STAND);
+  EXPECT_EQ(h17.getAction(softNineteenVs6), Action::DOUBLE);
+
+  // H17 adds surrender on 17 vs A, whose no-surrender play is STAND, not HIT.
+  const State seventeenVsAce(17, 1, false, false, true);
+  EXPECT_EQ(h17.getAction(seventeenVsAce, /*allowSurrender=*/true),
+            Action::SURRENDER);
+  EXPECT_EQ(h17.getAction(seventeenVsAce, /*allowSurrender=*/false),
+            Action::STAND);
+}
+
+TEST_F(EvaluatorTest, PairSplitsAssumeNoDoubleAfterSplit) {
+  BasicStrategy s17(GameRules::vegasStrip());
+  auto pair = [](int total, int dealer, bool soft = false) {
+    return State(total, dealer, soft, /*canSplit=*/true, /*canDouble=*/true);
+  };
+  // The engine forbids doubling after a split, which removes the weakest splits.
+  EXPECT_NE(s17.getAction(pair(8, 5)), Action::SPLIT);   // 4,4 vs 5
+  EXPECT_NE(s17.getAction(pair(12, 2)), Action::SPLIT);  // 6,6 vs 2
+  EXPECT_NE(s17.getAction(pair(4, 3)), Action::SPLIT);   // 2,2 vs 3
+  EXPECT_EQ(s17.getAction(pair(4, 4)), Action::SPLIT);   // 2,2 vs 4
+  EXPECT_EQ(s17.getAction(pair(16, 10)), Action::SPLIT); // 8,8 vs T
+  EXPECT_EQ(s17.getAction(pair(12, 1, true)), Action::SPLIT); // A,A vs A
+  EXPECT_EQ(s17.getAction(pair(20, 6)), Action::STAND);  // T,T
+  EXPECT_EQ(s17.getAction(pair(10, 6)), Action::DOUBLE); // 5,5 is a hard 10
 }
 
 TEST_F(EvaluatorTest, BasicStrategyStandOnHard17) {

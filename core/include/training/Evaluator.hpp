@@ -6,6 +6,7 @@
 #include <map>
 #include <optional>
 #include <random>
+#include <set>
 #include <vector>
 
 namespace blackjack {
@@ -127,12 +128,15 @@ std::vector<AuditState> buildAuditStates(const GameRules &rules,
 /**
  * @brief Basic strategy lookup table
  *
- * Mathematically optimal decisions for blackjack.
- * Used to compare learned strategy with optimal strategy.
+ * Multi-deck, total-dependent basic strategy for this engine's rules (dealer
+ * peeks, one split, split aces one card, no double after split), with the
+ * S17/H17 differences taken from the rules. Single- and double-deck presets
+ * are graded against the same multi-deck chart; the exact per-rule answer
+ * needs a solver (see the roadmap).
  */
 class BasicStrategy {
 public:
-  BasicStrategy();
+  explicit BasicStrategy(const GameRules &rules = GameRules{});
 
   /**
    * @brief Get optimal action for state
@@ -160,17 +164,30 @@ public:
   bool isCorrectAction(const ai::State &state, ai::Action action,
                        bool allowSurrender = true) const;
 
+  /**
+   * @brief The play when the book says DOUBLE but the hand can't double.
+   *
+   * STAND on the "double, else stand" soft cells (soft 18 against a weak
+   * card), HIT everywhere else. Treating every DOUBLE as HIT would call
+   * hitting a three-card soft 18 against a 5 correct.
+   */
+  ai::Action fallbackWhenCannotDouble(const ai::State &state) const;
+
 private:
   // Strategy tables: [player total][dealer up card] -> Action
   std::map<std::pair<int, int>, ai::Action> hardStrategy_;
   std::map<std::pair<int, int>, ai::Action> softStrategy_;
+  // Soft cells where DOUBLE falls back to STAND rather than HIT.
+  std::set<std::pair<int, int>> doubleElseStand_;
+  // Hard cells where late surrender beats the table's play, when offered.
+  std::set<std::pair<int, int>> surrender_;
   // [pair rank (A=1, T=10)][dealer up card] -> SPLIT, or the play when not
   // splitting. Without this the EV baseline below misplays every pair and
   // stops being a fair reference.
   std::map<std::pair<int, int>, ai::Action> pairStrategy_;
 
-  void initializeHardStrategy();
-  void initializeSoftStrategy();
+  void initializeHardStrategy(bool h17);
+  void initializeSoftStrategy(bool h17);
   void initializePairStrategy();
 };
 
@@ -183,8 +200,9 @@ private:
  */
 class BasicStrategyAgent : public ai::Agent {
 public:
-  explicit BasicStrategyAgent(bool allowSurrender = false)
-      : allowSurrender_(allowSurrender) {}
+  /** Plays the chart for these rules, surrendering only if they offer it. */
+  explicit BasicStrategyAgent(const GameRules &rules = GameRules{})
+      : strategy_(rules), allowSurrender_(rules.surrender) {}
 
   ai::Action chooseAction(const ai::State &state,
                           const std::vector<ai::Action> &validActions,
