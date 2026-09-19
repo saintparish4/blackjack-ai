@@ -4,6 +4,7 @@
 #include "../game/BlackjackGame.hpp"
 #include "../game/GameRules.hpp"
 #include <map>
+#include <optional>
 #include <random>
 #include <vector>
 
@@ -42,6 +43,22 @@ struct EvaluationResult {
         blackjacks(0), busts(0), winRate(0.0), lossRate(0.0), pushRate(0.0),
         avgReward(0.0), bustRate(0.0), strategyAccuracy(0.0),
         rewardStdErr(0.0) {}
+};
+
+/**
+ * @brief An agent's EV next to the two baselines that give it meaning.
+ *
+ * All three are measured by the same Evaluator on the same rules, so they are
+ * directly comparable; see Evaluator::compareAgainstBaselines.
+ */
+struct BaselineComparison {
+  EvaluationResult agent;
+  EvaluationResult book;   ///< BasicStrategyAgent
+  EvaluationResult random; ///< RandomAgent
+
+  /// Share of the random-to-book EV range the agent recovers: 0 plays like
+  /// random, 1 plays like the book. NaN when the range is degenerate.
+  double gapRecovered = 0.0;
 };
 
 /**
@@ -221,8 +238,13 @@ class Evaluator {
 public:
   /**
    * @brief Construct evaluator with game rules
+   *
+   * @param seed Fixes the shoes every evaluate() call deals from. Each call
+   *   still gets a fresh shoe (derived from the seed and a call counter), so a
+   *   seeded run is reproducible without every evaluation replaying one deal.
    */
-  explicit Evaluator(const GameRules &rules = GameRules{});
+  explicit Evaluator(const GameRules &rules = GameRules{},
+                     std::optional<uint32_t> seed = std::nullopt);
 
   /**
    * @brief Evaluate agent over multiple games
@@ -234,6 +256,17 @@ public:
    */
   EvaluationResult evaluate(ai::Agent *agent, size_t numGames,
                             bool compareStrategy = true);
+
+  /**
+   * @brief Evaluate an agent alongside basic strategy and random play.
+   *
+   * @param rounds Rounds per policy. Per-round reward has a standard deviation
+   *   near 1.15, so anything much under 100,000 cannot resolve the gap between
+   *   a good agent and the book.
+   * @param baselineSeed Seeds RandomAgent's action choices.
+   */
+  BaselineComparison compareAgainstBaselines(ai::Agent *agent, size_t rounds,
+                                             uint32_t baselineSeed = 1234);
 
   /**
    * @brief Compare agent's strategy with basic strategy via exhaustive iteration
@@ -262,6 +295,11 @@ public:
 private:
   GameRules rules_;
   BasicStrategy basicStrategy_;
+  std::optional<uint32_t> seed_;
+  uint32_t evaluationCount_ = 0;
+
+  /** Shoe seed for the next evaluate() call; nullopt when unseeded. */
+  std::optional<uint32_t> nextDealSeed();
 
   /**
    * @brief Play one evaluation game.

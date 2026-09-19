@@ -68,6 +68,19 @@ jobs:
         working-directory: core
         run: ../build/play --report --model ./models/final_agent
 
+      # The lab bench's contract is that (config, seed) fixes every number.
+      # Run the same small experiment twice and require identical output.
+      - name: Smoke test experiment runner is deterministic
+        working-directory: core
+        run: |
+          for run in a b; do
+            ../build/experiment --config ../config/default.cfg --seeds 2 \
+              --episodes 20000 --eval-rounds 20000 --out /tmp/exp-$run --name smoke \
+              | grep -v '^Output\|^Wrote' > /tmp/exp-$run.txt
+          done
+          diff /tmp/exp-a/smoke/results.csv /tmp/exp-b/smoke/results.csv
+          diff /tmp/exp-a.txt /tmp/exp-b.txt
+
   sanitizers:
     name: asan+ubsan / ubuntu
     runs-on: ubuntu-latest

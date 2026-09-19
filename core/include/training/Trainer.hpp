@@ -8,10 +8,29 @@
 #include <chrono>
 #include <functional>
 #include <memory>
+#include <optional>
+#include <string>
 #include <vector>
 
 namespace blackjack {
 namespace training {
+
+/**
+ * @brief Signal early stopping watches for improvement.
+ *
+ * Win rate used to be the signal. It saturates near 43% within the first few
+ * evaluations, because even perfect play loses more hands than it wins, so it
+ * said nothing about whether the policy was still improving.
+ */
+enum class EarlyStopMetric {
+  ACCURACY, ///< Policy-audit agreement with basic strategy: no sampling noise
+  EV,       ///< Mean reward per round over evalGames: noisy at small evalGames
+};
+
+/** Parse "accuracy" / "ev". @throws std::invalid_argument on anything else. */
+EarlyStopMetric earlyStopMetricFromString(const std::string &name);
+std::string toString(EarlyStopMetric metric);
+
 /**
  * @brief Configuration for training session
  */
@@ -31,7 +50,7 @@ struct TrainingConfig {
   /// Directory for checkpoints
   std::string checkpointDir = "./checkpoints";
 
-  /// Directory for logs
+  /// Directory for logs. Empty = no CSV log (Logger creates the directory).
   std::string logDir = "./logs";
 
   /// Game rules to use
@@ -40,11 +59,26 @@ struct TrainingConfig {
   /// Enable verbose logging
   bool verbose = true;
 
-  /// Early stopping: stop if win rate doesn't improve for N evaluations
+  /// Early stopping: stop if the metric doesn't improve for N evaluations
   size_t earlyStoppingPatience = 10;
 
-  /// Minimum improvement to reset patience counter (0.1 = 0.1%)
+  /// Minimum improvement to reset the patience counter, in the metric's own
+  /// units: 0.001 is 0.1 percentage points of accuracy, or 0.001 units of EV.
   double minImprovement = 0.001;
+
+  /// What "improvement" means for early stopping.
+  EarlyStopMetric earlyStoppingMetric = EarlyStopMetric::ACCURACY;
+
+  /// Seeds the training shoe and the evaluation shoes. The agent's own
+  /// exploration RNG is seeded where the agent is built. Unset = nondeterministic.
+  std::optional<uint32_t> seed;
+
+  /// Periodic and final checkpoints. Off for experiment sweeps, which save
+  /// only the final model.
+  bool saveCheckpoints = true;
+
+  /// Rounds per policy for the end-of-run EV comparison against baselines.
+  size_t reportEvalRounds = 200'000;
 
   // ---- Reporting fields (used by saveTrainingReport) ----
 
@@ -55,6 +89,7 @@ struct TrainingConfig {
   std::string rulesPresetName = "default";
 
   /// Agent hyperparameters stored here for inclusion in the report
+  std::string agentName = "Q-Learning";
   double learningRate   = 0.1;
   double discountFactor = 0.95;
   double epsilon        = 1.0;
@@ -144,6 +179,11 @@ public:
   TrainingMetrics getMetrics() const { return currentMetrics_; }
 
   /**
+   * @brief Wall time spent training, excluding the end-of-run report
+   */
+  double getTrainingSeconds() const { return trainingSeconds_; }
+
+  /**
    * @brief Get training history
    */
   const std::vector<TrainingMetrics> &getHistory() const {
@@ -200,8 +240,10 @@ private:
   std::atomic<bool> paused_;
   std::atomic<bool> shouldStop_;
   size_t episodesSinceImprovement_;
-  double bestWinRate_;
-  std::chrono::steady_clock::time_point trainingStartTime_;
+  double bestMetric_;
+  /// Wall time spent inside trainEpisodes(), excluding the end-of-run report's
+  /// baseline evaluations, so episodes/sec measures training alone.
+  double trainingSeconds_ = 0.0;
 
   /**
    * @brief Execute evaluation

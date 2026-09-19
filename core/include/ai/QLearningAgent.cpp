@@ -1,14 +1,15 @@
 #include "QLearningAgent.hpp"
 #include <algorithm>
 #include <fstream>
-#include <iostream>
+#include <iomanip>
 #include <stdexcept>
 
 namespace blackjack {
 namespace ai {
-QLearningAgent::QLearningAgent(const Hyperparameters &params)
+QLearningAgent::QLearningAgent(const Hyperparameters &params,
+                               std::optional<uint32_t> seed)
     : params_(params), qTable_(0.0), epsilon_(params.epsilon),
-      rng_(std::random_device{}()), stepCount_(0) {
+      rng_(seed ? *seed : std::random_device{}()), stepCount_(0) {
   if (!params_.isValid()) {
     throw std::invalid_argument("Invalid hyperparameters");
   }
@@ -75,6 +76,10 @@ void QLearningAgent::save(const std::string &filepath) const {
     throw std::runtime_error("Cannot open meta file for writing");
   }
 
+  // Default stream precision is 6 significant digits, which writes an
+  // epsilon_decay of 0.9999985 as 0.999999: a decay rate that reaches
+  // epsilon_min at a completely different point in training.
+  metaFile << std::setprecision(10);
   metaFile << "agent_type: Q-Learning\n";
   metaFile << "learning_rate: " << params_.learningRate << "\n";
   metaFile << "discount_factor: " << params_.discountFactor << "\n";
@@ -85,11 +90,6 @@ void QLearningAgent::save(const std::string &filepath) const {
   metaFile << "state_space_size: " << qTable_.size() << "\n";
 
   metaFile.close();
-
-  std::cout << "Saved Q-learning agent to " << filepath << "\n";
-  std::cout << "  States learned: " << qTable_.size() << "\n";
-  std::cout << "  Steps taken: " << stepCount_ << "\n";
-  std::cout << "  Current epsilon: " << epsilon_ << "\n";
 }
 
 void QLearningAgent::load(const std::string &filepath) {
@@ -121,11 +121,6 @@ void QLearningAgent::load(const std::string &filepath) {
   }
 
   metaFile.close();
-
-  std::cout << "Loaded Q-learning agent from " << filepath << "\n";
-  std::cout << "  States learned: " << qTable_.size() << "\n";
-  std::cout << "  Steps taken: " << stepCount_ << "\n";
-  std::cout << "  Current epsilon: " << epsilon_ << "\n";
 }
 
 void QLearningAgent::reset() {

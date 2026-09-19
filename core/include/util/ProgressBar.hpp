@@ -62,8 +62,8 @@ public:
       if (!finalInfo.empty()) {
         std::cout << " | " << finalInfo;
       }
+      std::cout << "\n" << std::flush;
     }
-    std::cout << "\n" << std::flush;
   }
 
   void setSilent(bool silent) { silent_ = silent; }

@@ -1,5 +1,6 @@
 #include "StrategyChart.hpp"
 #include <iomanip>
+#include <sstream>
 
 #ifdef _WIN32
 #include <io.h>
@@ -71,15 +72,21 @@ void StrategyChart::print(ai::Agent &agent, const BasicStrategy &basicStrategy,
                           bool allowSurrender) const {
   bool useColor = !forceNoColor && isTerminal();
 
+  // Formatted separately: the caller's stream may still carry a fixed
+  // precision from earlier output, which once printed this 0.05 as "0.1".
+  std::ostringstream threshold;
+  threshold << marginThreshold_;
+
   if (useColor) {
     out << "\n" << BOLD << "=== Strategy Chart ===" << RESET << "\n";
     out << "Legend: " << GREEN << "H" << RESET << "=matches basic strategy  "
         << RED << "H" << RESET << "=diverges  " << YELLOW << "H" << RESET
-        << "=uncertain (margin<" << marginThreshold_ << ")\n";
+        << "=uncertain (margin<" << threshold.str() << ")\n";
   } else {
     out << "\n=== Strategy Chart ===\n";
     out << "Legend: UPPER=matches basic strategy  lower=diverges\n"
-        << "  margin<" << marginThreshold_ << " treated as uncertain\n";
+        << "  margin<" << threshold.str()
+        << " is shown as uncertain in the colour chart\n";
   }
   out << "Actions: H=Hit S=Stand D=Double P=Split R=Surrender  .=never trained\n";
 

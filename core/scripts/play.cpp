@@ -4,13 +4,16 @@
 #include "game/GameRules.hpp"
 #include "training/ConvergenceReport.hpp"
 #include "training/Evaluator.hpp"
+#include "training/RunConfig.hpp"
 #include "training/StrategyChart.hpp"
 #include "util/ArgParser.hpp"
 #include "util/ConfigParser.hpp"
 #include <algorithm>
+#include <cmath>
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <string>
 
 using namespace blackjack;
@@ -31,6 +34,9 @@ constexpr const char *BOLD   = "\033[1m";
 constexpr const char *DIM    = "\033[2m";
 } // namespace color
 
+/** Blackjack payout of the table being played; set once in main(). */
+static double g_blackjackPayout = 1.5;
+
 // ---------------------------------------------------------------------------
 // Forward declarations
 // ---------------------------------------------------------------------------
@@ -42,17 +48,6 @@ void printReport(QLearningAgent &agent, const GameRules &rules);
 // ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
-
-static GameRules rulesFromPreset(const std::string &preset) {
-    if (preset == "vegas-strip")   return GameRules::vegasStrip();
-    if (preset == "downtown")      return GameRules::downtown();
-    if (preset == "atlantic-city") return GameRules::atlanticCity();
-    if (preset == "european")      return GameRules::european();
-    if (preset == "single-deck")   return GameRules::singleDeck();
-    std::cerr << "Warning: unknown rules preset '" << preset
-              << "', falling back to default rules.\n";
-    return GameRules{};
-}
 
 // ---------------------------------------------------------------------------
 // Beginner helpers
@@ -79,7 +74,8 @@ void printWelcome(const std::string &mode) {
     std::cout << "  - Beat the dealer's total without busting\n"
               << "  - Dealer busts and you haven't → you win\n"
               << "  - Tie (\"push\") → your bet is returned\n"
-              << "  - Blackjack (Ace + 10-value on first two cards) → pays 1.5x!\n\n";
+              << "  - Blackjack (Ace + 10-value on first two cards) → pays "
+              << g_blackjackPayout << "x!\n\n";
 
     std::cout << color::BOLD << "Your Actions:\n" << color::RESET;
     std::cout << "  H = Hit       — take another card\n"
@@ -108,7 +104,7 @@ void printWelcome(const std::string &mode) {
 const char *friendlyOutcome(Outcome o) {
     switch (o) {
     case Outcome::PLAYER_WIN:       return "You win!";
-    case Outcome::PLAYER_BLACKJACK: return "Blackjack! You win 1.5x your bet!";
+    case Outcome::PLAYER_BLACKJACK: return "Blackjack! It pays extra (3:2 at most tables).";
     case Outcome::DEALER_BUST:      return "You win! The dealer went over 21.";
     case Outcome::PUSH:             return "Push — it's a tie. Your bet is returned.";
     case Outcome::DEALER_WIN:       return "Dealer wins this one.";
@@ -123,7 +119,9 @@ int chipDelta(Outcome o, bool wasDoubled) {
     int bet = wasDoubled ? 20 : 10;
     switch (o) {
     case Outcome::PLAYER_WIN:       return bet;
-    case Outcome::PLAYER_BLACKJACK: return 15;   // 1.5x on base $10 always
+    // A natural is never doubled, so it pays on the base $10 bet.
+    case Outcome::PLAYER_BLACKJACK:
+        return static_cast<int>(std::lround(10 * g_blackjackPayout));
     case Outcome::DEALER_BUST:      return bet;
     case Outcome::PUSH:             return 0;
     case Outcome::DEALER_WIN:       return -bet;
@@ -503,7 +501,8 @@ void playAIMode(BlackjackGame &game, QLearningAgent &agent, int numHands, bool b
         for (size_t i = 0; i < outcomes.size(); ++i) {
             Outcome o       = outcomes[i];
             bool    doubled = (i < wasDoubled.size()) && wasDoubled[i];
-            double  reward  = GameStateConverter::outcomeToReward(o, doubled);
+            double  reward  = GameStateConverter::outcomeToReward(
+                o, doubled, game.getRules().blackjackPayout);
             totalReward += reward;
 
             bool isWin  = (o == Outcome::PLAYER_WIN || o == Outcome::PLAYER_BLACKJACK || o == Outcome::DEALER_BUST);
@@ -754,13 +753,16 @@ int main(int argc, char *argv[]) {
     args.addFlag("hands",  "n", "Number of hands to play", "10");
     args.addFlag("rules",  "r", "Rule preset name", "vegas-strip");
     args.addFlag("config", "",  "Load INI config file");
+    args.addFlag("seed",   "s", "Seed the shoe so a session can be replayed exactly");
     args.addBool("report",   "", "Print strategy chart and convergence report, then exit");
     args.addBool("beginner", "b", "Beginner mode: plain-English explanations, chip balance, AI reasoning");
     args.addBool("help",   "h", "Show this help message");
     if (!args.parse(argc, argv)) return 0;
 
+    // Rules: CLI > config > default, resolved the same way train resolves
+    // them. --config used to be parsed and then ignored.
+    ConfigParser cfg;
     if (args.has("config")) {
-        ConfigParser cfg;
         try {
             cfg.load(args.getString("config"));
         } catch (const std::exception &e) {
@@ -768,9 +770,16 @@ int main(int argc, char *argv[]) {
             return 1;
         }
     }
-
-    std::string preset = args.getString("rules");
-    GameRules rules = rulesFromPreset(preset);
+    GameRules rules;
+    try {
+        RunOverrides overrides;
+        if (args.wasProvided("rules")) overrides.rulesPreset = args.getString("rules");
+        rules = loadRunConfig(cfg, overrides).training.gameRules;
+    } catch (const std::exception &e) {
+        std::cerr << "Error: " << e.what() << "\n";
+        return 1;
+    }
+    g_blackjackPayout = rules.blackjackPayout;
 
     if (args.has("report")) {
         if (!args.has("model")) {
@@ -810,7 +819,16 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    BlackjackGame game(rules);
+    std::optional<uint32_t> seed;
+    if (args.has("seed")) {
+        try {
+            seed = static_cast<uint32_t>(std::stoul(args.getString("seed")));
+        } catch (const std::exception &) {
+            std::cerr << "Error: --seed must be a non-negative integer\n";
+            return 1;
+        }
+    }
+    BlackjackGame game(rules, seed);
 
     if (mode == "human")        playHumanMode(game, numHands, beginnerMode);
     else if (mode == "ai")      playAIMode(game, *agent, numHands, beginnerMode);

@@ -1,9 +1,12 @@
 #pragma once
 
+#include <filesystem>
 #include <fstream>
 #include <map>
 #include <stdexcept>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace blackjack {
 namespace util {
@@ -18,34 +21,16 @@ namespace util {
  *
  * Type coercion errors throw std::runtime_error with the offending key/value.
  * Missing keys return the caller-supplied default.
+ *
+ * `extends = <path>` loads another config first (path relative to this file),
+ * then applies this file's keys on top, wherever the line appears. It lets an
+ * experiment arm be a three-line diff against tuned.cfg instead of a copy that
+ * silently goes stale when tuned.cfg changes.
  */
 class ConfigParser {
 public:
     /** Load key-value pairs from a file. Throws if the file cannot be opened. */
-    void load(const std::string& filepath) {
-        std::ifstream file(filepath);
-        if (!file.is_open()) {
-            throw std::runtime_error("Cannot open config file: " + filepath);
-        }
-        std::string line;
-        while (std::getline(file, line)) {
-            auto commentPos = line.find('#');
-            if (commentPos != std::string::npos) {
-                line = line.substr(0, commentPos);
-            }
-            line = trim(line);
-            if (line.empty()) continue;
-
-            auto eq = line.find('=');
-            if (eq == std::string::npos) continue;
-
-            std::string key   = trim(line.substr(0, eq));
-            std::string value = trim(line.substr(eq + 1));
-            if (!key.empty()) {
-                values_[key] = value;
-            }
-        }
-    }
+    void load(const std::string& filepath) { load(filepath, 0); }
 
     bool has(const std::string& key) const {
         return values_.count(key) > 0;
@@ -95,6 +80,51 @@ public:
 
 private:
     std::map<std::string, std::string> values_;
+
+    void load(const std::string& filepath, int depth) {
+        if (depth > 8) {
+            throw std::runtime_error("Config 'extends' chain too deep (cycle?) at: " +
+                                     filepath);
+        }
+        std::ifstream file(filepath);
+        if (!file.is_open()) {
+            throw std::runtime_error("Cannot open config file: " + filepath);
+        }
+
+        std::vector<std::pair<std::string, std::string>> pairs;
+        std::string base;
+        std::string line;
+        while (std::getline(file, line)) {
+            auto commentPos = line.find('#');
+            if (commentPos != std::string::npos) {
+                line = line.substr(0, commentPos);
+            }
+            line = trim(line);
+            if (line.empty()) continue;
+
+            auto eq = line.find('=');
+            if (eq == std::string::npos) continue;
+
+            std::string key   = trim(line.substr(0, eq));
+            std::string value = trim(line.substr(eq + 1));
+            if (key == "extends") {
+                base = value;
+            } else if (!key.empty()) {
+                pairs.emplace_back(key, value);
+            }
+        }
+
+        if (!base.empty()) {
+            std::filesystem::path basePath(base);
+            if (basePath.is_relative()) {
+                basePath = std::filesystem::path(filepath).parent_path() / basePath;
+            }
+            load(basePath.string(), depth + 1);
+        }
+        for (auto& kv : pairs) {
+            values_[kv.first] = kv.second;
+        }
+    }
 
     static std::string trim(const std::string& s) {
         const char* ws = " \t\r\n";

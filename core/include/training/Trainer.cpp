@@ -1,29 +1,59 @@
 #include "Trainer.hpp"
 #include "../ai/GameStateConverter.hpp"
 #include "../util/ProgressBar.hpp"
+#include "../util/Seed.hpp"
 #include "ConvergenceReport.hpp"
 #include "StrategyChart.hpp"
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <sstream>
+#include <stdexcept>
 #include <thread>
 
 
 namespace blackjack {
 namespace training {
+
+EarlyStopMetric earlyStopMetricFromString(const std::string &name) {
+  if (name == "accuracy") return EarlyStopMetric::ACCURACY;
+  if (name == "ev") return EarlyStopMetric::EV;
+  throw std::invalid_argument("early_stopping_metric must be 'accuracy' or "
+                              "'ev', got '" + name + "'");
+}
+
+std::string toString(EarlyStopMetric metric) {
+  return metric == EarlyStopMetric::EV ? "ev" : "accuracy";
+}
+
+namespace {
+
+std::optional<uint32_t> streamSeed(const std::optional<uint32_t> &seed,
+                                   util::SeedStream stream) {
+  if (!seed) return std::nullopt;
+  return util::deriveSeed(*seed, stream);
+}
+
+} // namespace
+
 Trainer::Trainer(std::shared_ptr<ai::Agent> agent, const TrainingConfig &config)
     : agent_(agent), config_(config),
-      game_(std::make_unique<BlackjackGame>(config.gameRules)),
-      evaluator_(std::make_unique<Evaluator>(config.gameRules)),
-      logger_(std::make_unique<Logger>(config.logDir)), paused_(false),
-      shouldStop_(false), episodesSinceImprovement_(0), bestWinRate_(0.0),
-      trainingStartTime_(std::chrono::steady_clock::now()) {
-  // Create checkpoint directory if it doesn't exist
-  std::filesystem::create_directories(config_.checkpointDir);
-  std::filesystem::create_directories(config_.logDir);
+      game_(std::make_unique<BlackjackGame>(
+          config.gameRules, streamSeed(config.seed, util::SeedStream::TRAIN_DEAL))),
+      evaluator_(std::make_unique<Evaluator>(
+          config.gameRules, streamSeed(config.seed, util::SeedStream::EVAL_DEAL))),
+      logger_(config.logDir.empty() ? nullptr
+                                    : std::make_unique<Logger>(config.logDir)),
+      paused_(false),
+      shouldStop_(false), episodesSinceImprovement_(0),
+      bestMetric_(std::numeric_limits<double>::lowest()) {
+  if (config_.saveCheckpoints) {
+    std::filesystem::create_directories(config_.checkpointDir);
+  }
 
   if (config_.verbose) {
     std::cout << "=== Training Configuration ===\n";
@@ -33,6 +63,11 @@ Trainer::Trainer(std::shared_ptr<ai::Agent> agent, const TrainingConfig &config)
               << "\n";
     std::cout << "Checkpoint dir: " << config_.checkpointDir << "\n";
     std::cout << "Log dir: " << config_.logDir << "\n";
+    std::cout << "Seed: "
+              << (config_.seed ? std::to_string(*config_.seed) : "none (nondeterministic)")
+              << "\n";
+    std::cout << "Early stopping: " << toString(config_.earlyStoppingMetric)
+              << ", patience " << config_.earlyStoppingPatience << "\n";
     std::cout << "============================\n\n";
   }
 }
@@ -48,6 +83,7 @@ TrainingMetrics Trainer::trainEpisodes(size_t numEpisodes) {
     std::cout << "Starting training for " << numEpisodes << " episodes...\n";
   }
 
+  const auto loopStart = std::chrono::steady_clock::now();
   size_t startEpisode = currentMetrics_.totalEpisodes;
   size_t endEpisode = startEpisode + numEpisodes;
 
@@ -99,7 +135,8 @@ TrainingMetrics Trainer::trainEpisodes(size_t numEpisodes) {
     }
 
     // Periodic checkpoint
-    if ((episode + 1) % config_.checkpointFrequency == 0) {
+    if (config_.saveCheckpoints && config_.checkpointFrequency > 0 &&
+        (episode + 1) % config_.checkpointFrequency == 0) {
       saveCheckpoint(episode + 1);
     }
 
@@ -123,6 +160,9 @@ TrainingMetrics Trainer::trainEpisodes(size_t numEpisodes) {
 
   // Final checkpoint
   saveCheckpoint(currentMetrics_.totalEpisodes);
+  trainingSeconds_ += std::chrono::duration<double>(
+                          std::chrono::steady_clock::now() - loopStart)
+                          .count();
 
   if (config_.verbose) {
     std::cout << "\n=== Training Complete ===\n";
@@ -151,7 +191,8 @@ EpisodeStats Trainer::runEpisode() {
     stats.reward = 0.0;
     for (size_t i = 0; i < outcomes.size(); ++i) {
       stats.reward += ai::GameStateConverter::outcomeToReward(
-          outcomes[i], i < wasDoubled.size() && wasDoubled[i]);
+          outcomes[i], i < wasDoubled.size() && wasDoubled[i],
+          config_.gameRules.blackjackPayout);
     }
     stats.handsPlayed = 0;
     return stats;
@@ -167,7 +208,8 @@ EpisodeStats Trainer::runEpisode() {
   stats.reward = 0.0;
   for (size_t i = 0; i < outcomes.size(); ++i) {
     stats.reward += ai::GameStateConverter::outcomeToReward(
-        outcomes[i], i < wasDoubled.size() && wasDoubled[i]);
+        outcomes[i], i < wasDoubled.size() && wasDoubled[i],
+        config_.gameRules.blackjackPayout);
   }
   stats.handsPlayed = static_cast<int>(experiences.size());
   stats.playerBusted = std::any_of(
@@ -223,7 +265,8 @@ void Trainer::finishEpisode(std::vector<ai::Experience> &experiences,
   double finalReward = 0.0;
   for (size_t i = 0; i < outcomes.size(); ++i) {
     finalReward += ai::GameStateConverter::outcomeToReward(
-        outcomes[i], i < wasDoubledByHand.size() && wasDoubledByHand[i]);
+        outcomes[i], i < wasDoubledByHand.size() && wasDoubledByHand[i],
+        config_.gameRules.blackjackPayout);
   }
 
   for (size_t i = 0; i < experiences.size(); ++i) {
@@ -285,14 +328,21 @@ void Trainer::evaluate() {
   currentMetrics_.statesLearned = agent_->getStateCount();
 
   // Log metrics
-  logger_->log(currentMetrics_);
+  if (logger_) {
+    logger_->log(currentMetrics_);
+  }
 
   // Add to history
   trainingHistory_.push_back(currentMetrics_);
 
-  // Check for improvement
-  if (result.winRate > bestWinRate_ + config_.minImprovement) {
-    bestWinRate_ = result.winRate;
+  // Check for improvement. Accuracy comes from an exhaustive audit of the
+  // greedy policy, so it only moves when the policy does; EV is a sample mean
+  // and needs evalGames large enough that noise does not reset patience.
+  const double metric = config_.earlyStoppingMetric == EarlyStopMetric::EV
+                            ? result.avgReward
+                            : result.strategyAccuracy;
+  if (metric > bestMetric_ + config_.minImprovement) {
+    bestMetric_ = metric;
     episodesSinceImprovement_ = 0;
   } else {
     episodesSinceImprovement_++;
@@ -317,6 +367,9 @@ void Trainer::evaluate() {
 }
 
 void Trainer::saveCheckpoint(size_t episodeNum) {
+  if (!config_.saveCheckpoints) {
+    return;
+  }
   std::string filename =
       config_.checkpointDir + "/agent_episode_" + std::to_string(episodeNum);
 
@@ -337,7 +390,7 @@ namespace {
 
 /** Emit improvement suggestions based on convergence quality and final metrics. */
 void writeSuggestions(const ConvergenceResult &cr, const TrainingMetrics &m,
-                      std::ostream &out) {
+                      const BaselineComparison &cmp, std::ostream &out) {
   out << "\n=== Improvement Suggestions ===\n";
   bool any = false;
 
@@ -370,11 +423,16 @@ void writeSuggestions(const ConvergenceResult &cr, const TrainingMetrics &m,
     any = true;
   }
 
-  if (m.winRate < 0.42) {
-    out << "  • Win rate ("
-        << std::fixed << std::setprecision(1) << (m.winRate * 100)
-        << "%) is below basic strategy (~43%).\n"
-        << "    Consider more episodes, a slower epsilon_decay, or a higher learning_rate.\n";
+  // Judged on EV with its interval, not on win rate: win rate saturates near
+  // 43% for almost any sensible policy, and the last training-loop evaluation
+  // is only eval_games rounds, so it swings by several points on noise alone.
+  const double agentHigh = cmp.agent.avgReward + 1.96 * cmp.agent.rewardStdErr;
+  const double bookLow = cmp.book.avgReward - 1.96 * cmp.book.rewardStdErr;
+  if (cmp.agent.gamesPlayed > 0 && agentHigh < bookLow) {
+    out << "  • EV per round (" << std::fixed << std::setprecision(4)
+        << cmp.agent.avgReward << ") is below basic strategy ("
+        << cmp.book.avgReward << ") and the 95% intervals do not overlap,\n"
+        << "    so the gap is real. The divergences above show where it leaks.\n";
     any = true;
   }
 
@@ -410,15 +468,21 @@ void Trainer::runAndSaveReport(const TrainingMetrics &finalMetrics) {
   // deviation near 1.15, so a 2,000-round mean carries a +/-0.05 error bar and
   // can land anywhere from "twice as bad as random-ish" to "better than the
   // book" on noise alone.
-  const size_t baselineGames = 200000;
-  BasicStrategyAgent bookAgent(config_.gameRules.surrender);
-  RandomAgent randomAgent(/*seed=*/1234);
-  EvaluationResult agentResult =
-      evaluator_->evaluate(agent_.get(), baselineGames, /*compareStrategy=*/false);
-  EvaluationResult bookResult =
-      evaluator_->evaluate(&bookAgent, baselineGames, /*compareStrategy=*/false);
-  EvaluationResult randomResult =
-      evaluator_->evaluate(&randomAgent, baselineGames, /*compareStrategy=*/false);
+  //
+  // A seeded run measures on the same dedicated stream as the experiment
+  // runner, so `train --seed N` and seed N of an experiment report identical
+  // numbers for the identical agent they train.
+  const size_t baselineGames = config_.reportEvalRounds;
+  Evaluator seededFinal(config_.gameRules,
+                        streamSeed(config_.seed, util::SeedStream::FINAL_EVAL));
+  Evaluator &finalEvaluator = config_.seed ? seededFinal : *evaluator_;
+  BaselineComparison cmp = finalEvaluator.compareAgainstBaselines(
+      agent_.get(), baselineGames,
+      config_.seed ? util::deriveSeed(*config_.seed, util::SeedStream::BASELINE)
+                   : 1234);
+  const EvaluationResult &agentResult = cmp.agent;
+  const EvaluationResult &bookResult = cmp.book;
+  const EvaluationResult &randomResult = cmp.random;
 
   // ----- Terminal output (colored strategy chart + convergence) -----
   if (config_.verbose) {
@@ -426,13 +490,21 @@ void Trainer::runAndSaveReport(const TrainingMetrics &finalMetrics) {
     chart.print(*agent_, evaluator_->getBasicStrategy(), std::cout,
                 /*forceNoColor=*/false, config_.gameRules.surrender);
     convergenceReport.print(cr, std::cout);
-    writeSuggestions(cr, finalMetrics, std::cout);
+    writeSuggestions(cr, finalMetrics, cmp, std::cout);
   }
 
   // ----- Build plain-text report for file -----
-  auto endTime    = std::chrono::steady_clock::now();
-  auto durationSec = std::chrono::duration_cast<std::chrono::seconds>(
-                         endTime - trainingStartTime_).count();
+  // Fractional seconds: a whole-second count rendered a 1.7s run as
+  // "1 seconds" and then divided by it, overstating throughput by 70%.
+  const double durationSec = trainingSeconds_;
+
+  // Hyperparameters print at up to 10 significant digits: the stream default
+  // of 6 turns an epsilon_decay of 0.9999985 into 0.999999.
+  auto param = [](double v) {
+    std::ostringstream p;
+    p << std::defaultfloat << std::setprecision(10) << v;
+    return p.str();
+  };
 
   std::ostringstream oss;
 
@@ -451,17 +523,24 @@ void Trainer::runAndSaveReport(const TrainingMetrics &finalMetrics) {
   oss << std::setw(24) << "Surrender enabled"
       << ": " << (config_.gameRules.surrender ? "yes" : "no") << "\n";
   oss << std::setw(24) << "Blackjack payout"
-      << ": " << config_.gameRules.blackjackPayout << ":1\n";
+      << ": " << param(config_.gameRules.blackjackPayout) << ":1\n";
+  oss << std::setw(24) << "Agent"
+      << ": " << config_.agentName << "\n";
   oss << std::setw(24) << "Learning rate"
-      << ": " << config_.learningRate   << "\n";
+      << ": " << param(config_.learningRate)   << "\n";
   oss << std::setw(24) << "Discount factor"
-      << ": " << config_.discountFactor << "\n";
+      << ": " << param(config_.discountFactor) << "\n";
   oss << std::setw(24) << "Epsilon start"
-      << ": " << config_.epsilon        << "\n";
+      << ": " << param(config_.epsilon)        << "\n";
   oss << std::setw(24) << "Epsilon decay"
-      << ": " << config_.epsilonDecay   << "\n";
+      << ": " << param(config_.epsilonDecay)   << "\n";
   oss << std::setw(24) << "Epsilon min"
-      << ": " << config_.epsilonMin     << "\n";
+      << ": " << param(config_.epsilonMin)     << "\n";
+  oss << std::setw(24) << "Seed"
+      << ": " << (config_.seed ? std::to_string(*config_.seed) : "none") << "\n";
+  oss << std::setw(24) << "Early stopping"
+      << ": " << toString(config_.earlyStoppingMetric) << ", patience "
+      << config_.earlyStoppingPatience << "\n";
   oss << std::setw(24) << "Eval frequency"
       << ": " << config_.evalFrequency  << " episodes\n";
   oss << std::setw(24) << "Eval games"
@@ -471,11 +550,13 @@ void Trainer::runAndSaveReport(const TrainingMetrics &finalMetrics) {
   oss << "\n--- Training Stats ---\n";
   oss << std::setw(24) << "Total episodes"
       << ": " << finalMetrics.totalEpisodes << "\n";
-  oss << std::setw(24) << "Duration"
-      << ": " << durationSec << " seconds\n";
+  oss << std::setw(24) << "Training time"
+      << ": " << std::fixed << std::setprecision(2) << durationSec
+      << " s (includes periodic evaluations)\n";
   if (durationSec > 0) {
     oss << std::setw(24) << "Episodes / sec"
-        << ": " << (finalMetrics.totalEpisodes / static_cast<size_t>(durationSec)) << "\n";
+        << ": " << std::setprecision(0)
+        << (static_cast<double>(finalMetrics.totalEpisodes) / durationSec) << "\n";
   }
   oss << std::setw(24) << "States learned"
       << ": " << finalMetrics.statesLearned << "\n";
@@ -504,17 +585,17 @@ void Trainer::runAndSaveReport(const TrainingMetrics &finalMetrics) {
   oss << std::setw(24) << "Random play" << ": " << randomResult.avgReward
       << " +/- " << (1.96 * randomResult.rewardStdErr) << " (95% CI)\n";
 
-  const double spread = bookResult.avgReward - randomResult.avgReward;
-  if (spread > 1e-9) {
-    // 0% = plays like random, 100% = plays like the book. A cell-match score
-    // cannot express this, because most of the cells it counts almost never
-    // come up in a real shoe.
-    const double recovered =
-        (agentResult.avgReward - randomResult.avgReward) / spread;
+  if (!std::isnan(cmp.gapRecovered)) {
     oss << std::setw(24) << "EV gap recovered" << ": "
-        << std::setprecision(1) << (recovered * 100)
+        << std::setprecision(1) << (cmp.gapRecovered * 100)
         << "% of the random-to-book range\n";
   }
+  // Per settled hand, over the same rounds as the EV line: the "Final
+  // Performance" rates above come from the last eval_games-round evaluation
+  // and carry a margin of several points.
+  oss << std::setw(24) << "Agent win/loss/push" << ": " << std::setprecision(2)
+      << (agentResult.winRate * 100) << "% / " << (agentResult.lossRate * 100)
+      << "% / " << (agentResult.pushRate * 100) << "% per hand\n";
 
   // 4. Strategy chart (plain text — uppercase=correct, lowercase=diverges)
   StrategyChart chart;
@@ -525,7 +606,7 @@ void Trainer::runAndSaveReport(const TrainingMetrics &finalMetrics) {
   convergenceReport.print(cr, oss);
 
   // 7. Improvement suggestions
-  writeSuggestions(cr, finalMetrics, oss);
+  writeSuggestions(cr, finalMetrics, cmp, oss);
 
   // ----- Write to file -----
   std::filesystem::create_directories(config_.reportDir);

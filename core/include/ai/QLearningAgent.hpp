@@ -3,6 +3,7 @@
 #include "Agent.hpp"
 #include "PolicyTable.hpp"
 #include <cstdint>
+#include <optional>
 #include <random>
 
 namespace blackjack {
@@ -27,8 +28,11 @@ public:
     }
   };
 
+  /** seed: fixes the exploration stream so a run can be reproduced exactly.
+   *  Unseeded agents draw from std::random_device. */
   explicit QLearningAgent(const Hyperparameters &params = Hyperparameters{
-                              0.1, 0.95, 1.0, 0.99995, 0.01});
+                              0.1, 0.95, 1.0, 0.99995, 0.01},
+                          std::optional<uint32_t> seed = std::nullopt);
 
   Action chooseAction(const State &state,
                       const std::vector<Action> &validActions,

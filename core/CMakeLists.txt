@@ -99,9 +99,11 @@ target_link_libraries(blackjack_ai PUBLIC blackjack_game)
 set(TRAINING_SOURCES
     include/training/ConvergenceReport.cpp
     include/training/Evaluator.cpp
+    include/training/Experiment.cpp
     include/training/Logger.cpp
+    include/training/RunConfig.cpp
     include/training/Trainer.cpp
-    include/training/StrategyChart.cpp 
+    include/training/StrategyChart.cpp
 )
 
 add_library(blackjack_training STATIC ${TRAINING_SOURCES})
@@ -127,6 +129,7 @@ set(TEST_SOURCES
     tests/test_trainer.cpp
     tests/test_evaluator.cpp
     tests/test_argparser.cpp
+    tests/test_lab_bench.cpp
 )
 
 add_executable(run_tests ${TEST_SOURCES})
@@ -153,6 +156,10 @@ target_link_libraries(benchmark blackjack_training)
 add_executable(play scripts/play.cpp)
 target_link_libraries(play blackjack_training)
 
+# === Experiment Executable (one config over N seeds) ===
+add_executable(experiment scripts/experiment.cpp)
+target_link_libraries(experiment blackjack_training)
+
 # Create necessary directories
 file(MAKE_DIRECTORY ${PROJECT_SOURCE_DIR}/checkpoints)
 file(MAKE_DIRECTORY ${PROJECT_SOURCE_DIR}/logs)
@@ -178,4 +185,5 @@ message(STATUS "  - train (executable)")
 message(STATUS "  - run_tests (executable)")
 message(STATUS "  - benchmark (executable)")
 message(STATUS "  - play (executable)")
+message(STATUS "  - experiment (executable)")
 message(STATUS "=================================")

@@ -1,13 +1,14 @@
 #include "ai/QLearningAgent.hpp"
 #include "game/GameRules.hpp"
+#include "training/RunConfig.hpp"
 #include "training/Trainer.hpp"
+#include "util/ArgParser.hpp"
 #include "util/ConfigParser.hpp"
 #include <algorithm>
-#include <chrono>
 #include <csignal>
+#include <iomanip>
 #include <iostream>
 #include <memory>
-#include "util/ArgParser.hpp" 
 
 using namespace blackjack;
 using namespace blackjack::ai;
@@ -25,19 +26,6 @@ void signalHandler(int signum) {
   }
 }
 
-/** Returns a GameRules struct for the named preset (case-insensitive hyphenated
- *  names). Falls back to default GameRules and prints a warning on unknown names. */
-static GameRules rulesFromPreset(const std::string& preset) {
-  if (preset == "vegas-strip")   return GameRules::vegasStrip();
-  if (preset == "downtown")      return GameRules::downtown();
-  if (preset == "atlantic-city") return GameRules::atlanticCity();
-  if (preset == "european")      return GameRules::european();
-  if (preset == "single-deck")   return GameRules::singleDeck();
-  std::cerr << "Warning: unknown rules_preset '" << preset
-            << "', falling back to default rules.\n";
-  return GameRules{};
-}
-
 int main(int argc, char *argv[]) {
   signal(SIGINT,  signalHandler);
   signal(SIGTERM, signalHandler);
@@ -52,6 +40,7 @@ int main(int argc, char *argv[]) {
   args.addFlag("checkpoint", "c", "Resume from checkpoint file", "");
   args.addFlag("config", "", "Load INI config file", "");
   args.addFlag("rules", "r", "Rule preset name", "vegas-strip");
+  args.addFlag("seed", "s", "Seed for a reproducible run (agent, shoe and evaluation)", "");
   args.addBool("verbose", "v", "Enable verbose output");
   args.addBool("help", "h", "Show this help message");
   if (!args.parse(argc, argv)) return 0;
@@ -71,65 +60,33 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  // Episodes: CLI > config > default. wasProvided(), not has(): --episodes is
-  // registered with a default, so has() is true even when it is absent from
-  // argv, which would let the built-in default override the config file.
-  size_t numEpisodes = static_cast<size_t>(cfg.getInt("episodes", 1'000'000));
-  if (args.wasProvided("episodes")) numEpisodes = std::stoul(args.getString("episodes"));
+  // CLI > config > default. wasProvided(), not has(): --episodes and --rules
+  // are registered with defaults, so has() is true even when they are absent
+  // from argv, which would let a built-in default override the config file.
+  RunOverrides overrides;
+  RunConfig run;
+  try {
+    if (args.wasProvided("episodes"))
+      overrides.episodes = std::stoul(args.getString("episodes"));
+    if (args.wasProvided("rules")) overrides.rulesPreset = args.getString("rules");
+    if (args.wasProvided("seed"))
+      overrides.seed = static_cast<uint32_t>(std::stoul(args.getString("seed")));
+    run = loadRunConfig(cfg, overrides);
+  } catch (const std::exception &e) {
+    std::cerr << "Error: " << e.what() << "\n";
+    return 1;
+  }
+  TrainingConfig &config = run.training;
+  if (args.has("verbose")) config.verbose = true;
+
+  auto agent = makeAgent(run, config.seed);
 
   std::string checkpointLoad;
   if (args.has("checkpoint")) checkpointLoad = args.getString("checkpoint");
-
-  // --- Q-learning hyperparameters ---
-  QLearningAgent::Hyperparameters agentParams;
-  agentParams.learningRate  = cfg.getDouble("learning_rate",  0.1);
-  agentParams.discountFactor= cfg.getDouble("discount_factor",0.95);
-  agentParams.epsilon       = cfg.getDouble("epsilon",        1.0);
-  agentParams.epsilonDecay  = cfg.getDouble("epsilon_decay",  0.99995);
-  agentParams.epsilonMin    = cfg.getDouble("epsilon_min",    0.01);
-
-  auto agent = std::make_shared<QLearningAgent>(agentParams);
-
   if (!checkpointLoad.empty()) {
     std::cout << "Loading checkpoint: " << checkpointLoad << "\n\n";
     agent->load(checkpointLoad);
   }
-
-  // Rules preset: CLI > config > default (see the --episodes note above)
-  std::string preset = cfg.getString("rules_preset", "vegas-strip");
-  if (args.wasProvided("rules")) preset = args.getString("rules");
-  GameRules gameRules = rulesFromPreset(preset);
-
-  if (cfg.has("num_decks"))
-    gameRules.numDecks = static_cast<size_t>(cfg.getInt("num_decks"));
-  if (cfg.has("dealer_hits_soft_17"))
-    gameRules.dealerHitsSoft17 = cfg.getBool("dealer_hits_soft_17");
-  if (cfg.has("surrender"))
-    gameRules.surrender = cfg.getBool("surrender");
-
-  // --- Training config ---
-  TrainingConfig config;
-  config.numEpisodes           = numEpisodes;
-  config.evalFrequency         = static_cast<size_t>(cfg.getInt("eval_frequency",      10'000));
-  config.evalGames             = static_cast<size_t>(cfg.getInt("eval_games",          1'000));
-  config.checkpointFrequency   = static_cast<size_t>(cfg.getInt("checkpoint_frequency",50'000));
-  config.checkpointDir         = cfg.getString("checkpoint_dir", "./checkpoints");
-  config.logDir                = cfg.getString("log_dir",        "./logs");
-  config.reportDir             = cfg.getString("report_dir",     "./analysis");
-  // Verbose: CLI flag overrides config
-  bool verbose = cfg.getBool("verbose", true);
-  if (args.has("verbose")) verbose = true;
-  config.verbose               = verbose;
-  config.earlyStoppingPatience = static_cast<size_t>(cfg.getInt("early_stopping_patience", 10));
-  config.minImprovement        = cfg.getDouble("min_improvement", 0.001);
-  config.gameRules             = gameRules;
-  // Reporting fields
-  config.rulesPresetName       = preset;
-  config.learningRate          = agentParams.learningRate;
-  config.discountFactor        = agentParams.discountFactor;
-  config.epsilon               = agentParams.epsilon;
-  config.epsilonDecay          = agentParams.epsilonDecay;
-  config.epsilonMin            = agentParams.epsilonMin;
 
   // --- Create trainer ---
   g_trainer = std::make_unique<Trainer>(agent, config);
@@ -141,12 +98,10 @@ int main(int argc, char *argv[]) {
   std::cout << "Starting training...\n";
   std::cout << "Press Ctrl+C to stop and save checkpoint\n\n";
 
-  auto startTime = std::chrono::high_resolution_clock::now();
   TrainingMetrics finalMetrics = g_trainer->train();
-  auto endTime   = std::chrono::high_resolution_clock::now();
 
-  auto duration =
-      std::chrono::duration_cast<std::chrono::seconds>(endTime - startTime);
+  // Fractional seconds: whole seconds printed a 1.7s run as "1 seconds".
+  const double seconds = g_trainer->getTrainingSeconds();
 
   // --- Final results ---
   std::cout << "\n";
@@ -154,11 +109,13 @@ int main(int argc, char *argv[]) {
   std::cout << "     Training Complete!           \n";
   std::cout << "==================================\n";
   std::cout << "Total episodes:  " << finalMetrics.totalEpisodes << "\n";
-  std::cout << "Training time:   " << duration.count() << " seconds\n";
-  std::cout << "Episodes/sec:    "
-            << (finalMetrics.totalEpisodes /
-                std::max<decltype(duration)::rep>(1, duration.count()))
+  std::cout << "Training time:   " << std::fixed << std::setprecision(2)
+            << seconds << " s\n";
+  std::cout << "Episodes/sec:    " << std::setprecision(0)
+            << (static_cast<double>(finalMetrics.totalEpisodes) /
+                std::max(seconds, 1e-9))
             << "\n\n";
+  std::cout << std::setprecision(4);
 
   std::cout << "Final Performance:\n";
   std::cout << "  Win rate:   " << (finalMetrics.winRate  * 100) << "%\n";

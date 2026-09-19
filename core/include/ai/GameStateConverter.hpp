@@ -75,12 +75,17 @@ public:
     return false;
   }
 
-  /** Rewards: blackjack +1.5, win +1, push 0, loss/bust -1. If wasDoubled, multiply by 2. */
-  static double outcomeToReward(Outcome outcome, bool wasDoubled = false) {
+  /** Rewards: blackjack pays blackjackPayout (+1.5 at 3:2, +1.2 at 6:5), win
+   *  +1, push 0, loss/bust -1. If wasDoubled, multiply by 2.
+   *
+   *  Pass GameRules::blackjackPayout. Hard-coding 1.5 here once meant a 6:5
+   *  table trained and scored as if it paid 3:2, overstating every EV on it. */
+  static double outcomeToReward(Outcome outcome, bool wasDoubled = false,
+                                double blackjackPayout = 1.5) {
     double r;
     switch (outcome) {
     case Outcome::PLAYER_BLACKJACK:
-      r = 1.5;
+      r = blackjackPayout;
       break;
     case Outcome::PLAYER_WIN:
     case Outcome::DEALER_BUST:

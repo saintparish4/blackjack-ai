@@ -1,7 +1,9 @@
 #include "Evaluator.hpp"
 #include "../ai/GameStateConverter.hpp"
+#include "../util/Seed.hpp"
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace blackjack {
 namespace training {
@@ -276,14 +278,22 @@ ai::Action RandomAgent::chooseAction(const ai::State &,
 
 // === Evaluator Implementation ===
 
-Evaluator::Evaluator(const GameRules &rules) : rules_(rules) {}
+Evaluator::Evaluator(const GameRules &rules, std::optional<uint32_t> seed)
+    : rules_(rules), seed_(seed) {}
+
+std::optional<uint32_t> Evaluator::nextDealSeed() {
+  if (!seed_) {
+    return std::nullopt;
+  }
+  return util::deriveSeed(*seed_, evaluationCount_++);
+}
 
 EvaluationResult Evaluator::evaluate(ai::Agent *agent, size_t numGames,
                                      bool compareStrategy) {
   EvaluationResult result;
   result.gamesPlayed = numGames;
 
-  BlackjackGame game(rules_);
+  BlackjackGame game(rules_, nextDealSeed());
   double totalReward = 0.0;
   double totalRewardSq = 0.0;
 
@@ -318,7 +328,8 @@ EvaluationResult Evaluator::evaluate(ai::Agent *agent, size_t numGames,
         result.losses++;
         break;
       }
-      roundReward += ai::GameStateConverter::outcomeToReward(outcome, doubled);
+      roundReward += ai::GameStateConverter::outcomeToReward(
+          outcome, doubled, rules_.blackjackPayout);
     }
     totalReward += roundReward;
     totalRewardSq += roundReward * roundReward;
@@ -380,6 +391,27 @@ std::vector<Outcome> Evaluator::playGame(ai::Agent *agent, BlackjackGame &game) 
   }
 
   return game.getOutcomes();
+}
+
+BaselineComparison Evaluator::compareAgainstBaselines(ai::Agent *agent,
+                                                      size_t rounds,
+                                                      uint32_t baselineSeed) {
+  BaselineComparison cmp;
+  BasicStrategyAgent bookAgent(rules_.surrender);
+  RandomAgent randomAgent(baselineSeed);
+
+  cmp.agent = evaluate(agent, rounds, /*compareStrategy=*/false);
+  cmp.book = evaluate(&bookAgent, rounds, /*compareStrategy=*/false);
+  cmp.random = evaluate(&randomAgent, rounds, /*compareStrategy=*/false);
+
+  // 0% = plays like random, 100% = plays like the book. A cell-match score
+  // cannot express this, because most of the cells it counts almost never
+  // come up in a real shoe.
+  const double spread = cmp.book.avgReward - cmp.random.avgReward;
+  cmp.gapRecovered = spread > 1e-9
+                         ? (cmp.agent.avgReward - cmp.random.avgReward) / spread
+                         : std::numeric_limits<double>::quiet_NaN();
+  return cmp;
 }
 
 double Evaluator::compareWithBasicStrategy(ai::Agent *agent) {
