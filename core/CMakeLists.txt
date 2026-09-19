@@ -88,7 +88,9 @@ endif()
 set(AI_SOURCES
     include/ai/State.cpp
     include/ai/PolicyTable.cpp
-    include/ai/QLearningAgent.cpp
+    include/ai/TabularAgent.cpp
+    include/ai/ExpectedSarsaAgent.cpp
+    include/ai/DoubleQLearningAgent.cpp
 )
 
 add_library(blackjack_ai STATIC ${AI_SOURCES})
@@ -130,6 +132,7 @@ set(TEST_SOURCES
     tests/test_evaluator.cpp
     tests/test_argparser.cpp
     tests/test_lab_bench.cpp
+    tests/test_agents.cpp
 )
 
 add_executable(run_tests ${TEST_SOURCES})

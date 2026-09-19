@@ -1,5 +1,9 @@
 #include "RunConfig.hpp"
+#include "../ai/DoubleQLearningAgent.hpp"
+#include "../ai/ExpectedSarsaAgent.hpp"
+#include "../ai/QLearningAgent.hpp"
 #include "../util/Seed.hpp"
+#include <sstream>
 #include <stdexcept>
 
 namespace blackjack {
@@ -61,16 +65,21 @@ RunConfig loadRunConfig(const util::ConfigParser &cfg,
 
   // ---- Agent ----
   run.agentType = cfg.getString("agent", "q-learning");
-  if (run.agentType != "q-learning") {
+  if (run.agentType != "q-learning" && run.agentType != "expected-sarsa" &&
+      run.agentType != "double-q") {
     throw std::invalid_argument("unknown agent '" + run.agentType +
-                                "' (expected q-learning)");
+                                "' (expected q-learning, expected-sarsa, double-q)");
   }
-  ai::QLearningAgent::Hyperparameters &p = run.agentParams;
+  ai::TabularAgent::Hyperparameters &p = run.agentParams;
   p.learningRate   = cfg.getDouble("learning_rate", 0.1);
   p.discountFactor = cfg.getDouble("discount_factor", 0.95);
   p.epsilon        = cfg.getDouble("epsilon", 1.0);
   p.epsilonDecay   = cfg.getDouble("epsilon_decay", 0.99995);
   p.epsilonMin     = cfg.getDouble("epsilon_min", 0.01);
+  p.alphaSchedule  = ai::alphaScheduleFromString(
+      cfg.getString("alpha_schedule", "constant"));
+  p.alphaOmega     = cfg.getDouble("alpha_omega", 0.8);
+  p.alphaMin       = cfg.getDouble("alpha_min", 0.0);
   if (!p.isValid()) {
     throw std::invalid_argument("invalid agent hyperparameters in config");
   }
@@ -101,6 +110,11 @@ RunConfig loadRunConfig(const util::ConfigParser &cfg,
   // Reporting copies
   t.rulesPresetName = run.rulesPreset;
   t.agentName       = run.agentType;
+  if (p.alphaSchedule == ai::AlphaSchedule::VISIT) {
+    std::ostringstream alpha;
+    alpha << " (alpha = max(" << p.alphaMin << ", 1/(n+1)^" << p.alphaOmega << "))";
+    t.agentName += alpha.str();
+  }
   t.learningRate    = p.learningRate;
   t.discountFactor  = p.discountFactor;
   t.epsilon         = p.epsilon;
@@ -110,10 +124,16 @@ RunConfig loadRunConfig(const util::ConfigParser &cfg,
   return run;
 }
 
-std::shared_ptr<ai::QLearningAgent> makeAgent(const RunConfig &run,
-                                              std::optional<uint32_t> seed) {
+std::shared_ptr<ai::TabularAgent> makeAgent(const RunConfig &run,
+                                            std::optional<uint32_t> seed) {
   std::optional<uint32_t> agentSeed;
   if (seed) agentSeed = util::deriveSeed(*seed, util::SeedStream::AGENT);
+  if (run.agentType == "expected-sarsa") {
+    return std::make_shared<ai::ExpectedSarsaAgent>(run.agentParams, agentSeed);
+  }
+  if (run.agentType == "double-q") {
+    return std::make_shared<ai::DoubleQLearningAgent>(run.agentParams, agentSeed);
+  }
   return std::make_shared<ai::QLearningAgent>(run.agentParams, agentSeed);
 }
 

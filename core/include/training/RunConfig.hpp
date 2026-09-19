@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../ai/QLearningAgent.hpp"
+#include "../ai/TabularAgent.hpp"
 #include "../game/GameRules.hpp"
 #include "../util/ConfigParser.hpp"
 #include "Trainer.hpp"
@@ -21,8 +21,8 @@ namespace training {
  */
 struct RunConfig {
   TrainingConfig training;
-  ai::QLearningAgent::Hyperparameters agentParams;
-  std::string agentType = "q-learning";
+  ai::TabularAgent::Hyperparameters agentParams;
+  std::string agentType = "q-learning"; ///< q-learning | expected-sarsa | double-q
   std::string rulesPreset = "vegas-strip";
 };
 
@@ -52,7 +52,7 @@ RunConfig loadRunConfig(const util::ConfigParser &cfg,
 /** Build the agent a run describes. seed is the run seed; the agent's
  *  exploration stream is derived from it, so it is decorrelated from the
  *  shoes the same seed drives. */
-std::shared_ptr<ai::QLearningAgent>
+std::shared_ptr<ai::TabularAgent>
 makeAgent(const RunConfig &run, std::optional<uint32_t> seed = std::nullopt);
 
 } // namespace training
