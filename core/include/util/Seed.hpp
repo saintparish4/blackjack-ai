@@ -12,6 +12,7 @@ enum class SeedStream : uint32_t {
   EVAL_DEAL = 3,  ///< Shoes used by periodic and final evaluations
   BASELINE = 4,   ///< Baseline agents that need randomness (RandomAgent)
   FINAL_EVAL = 5, ///< Shoes for an experiment's end-of-run EV comparison
+  BET_CALIBRATION = 6, ///< Shoes a bet-learning agent measures its edge on
 };
 
 /**

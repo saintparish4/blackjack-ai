@@ -80,6 +80,10 @@ struct TrainingConfig {
   /// Rounds per policy for the end-of-run EV comparison against baselines.
   size_t reportEvalRounds = 200'000;
 
+  /// Greedy rounds a bet-learning agent plays after training to measure its
+  /// edge at each count (Evaluator::calibrateBets). Ignored otherwise.
+  size_t betCalibrationRounds = 2'000'000;
+
   // ---- Reporting fields (used by saveTrainingReport) ----
 
   /// Directory for training report output (default: ./analysis)

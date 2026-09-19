@@ -269,6 +269,79 @@ ai::Action BasicStrategyAgent::chooseAction(
   return validActions.empty() ? ai::Action::STAND : validActions[0];
 }
 
+int HiLoAgent::rampUnits(int trueCountFloor, int maxBet) {
+  int units = 1;
+  if (trueCountFloor >= 5) units = 8;
+  else if (trueCountFloor == 4) units = 6;
+  else if (trueCountFloor == 3) units = 4;
+  else if (trueCountFloor == 2) units = 2;
+  return std::max(1, std::min(units, maxBet));
+}
+
+std::optional<ai::Action> HiLoAgent::indexPlay(const ai::State &state, int tc) {
+  using ai::Action;
+  if (state.hasUsableAce) return std::nullopt; // all 17 are hard hands or T,T
+  const int p = state.playerTotal;
+  const int d = state.dealerUpCard; // ace = 1
+
+  // Each index: at or above it, play the deviation; below it, the other play.
+  struct Index { int total, dealer, index; Action atOrAbove, below; };
+  static const Index kIndices[] = {
+      {16, 10, 0, Action::STAND, Action::HIT},
+      {15, 10, 4, Action::STAND, Action::HIT},
+      {10, 10, 4, Action::DOUBLE, Action::HIT},
+      {12, 3, 2, Action::STAND, Action::HIT},
+      {12, 2, 3, Action::STAND, Action::HIT},
+      {11, 1, 1, Action::DOUBLE, Action::HIT},
+      {9, 2, 1, Action::DOUBLE, Action::HIT},
+      {10, 1, 4, Action::DOUBLE, Action::HIT},
+      {9, 7, 3, Action::DOUBLE, Action::HIT},
+      {16, 9, 5, Action::STAND, Action::HIT},
+      {13, 2, -1, Action::STAND, Action::HIT},
+      {12, 4, 0, Action::STAND, Action::HIT},
+      {12, 5, -2, Action::STAND, Action::HIT},
+      {12, 6, -1, Action::STAND, Action::HIT},
+      {13, 3, -2, Action::STAND, Action::HIT},
+  };
+
+  if (state.canSplit) {
+    // T,T splits against a 5 at +5 and a 6 at +4; every other pair plays by
+    // the book (a pair of 8s is not a hard 16 for index purposes).
+    if (p == 20 && (d == 5 || d == 6)) {
+      return tc >= (d == 5 ? 5 : 4) ? Action::SPLIT : Action::STAND;
+    }
+    return std::nullopt;
+  }
+  for (const Index &ix : kIndices) {
+    if (ix.total != p || ix.dealer != d) continue;
+    Action play = tc >= ix.index ? ix.atOrAbove : ix.below;
+    // A double index on a hand that has already hit falls back to hitting.
+    if (play == Action::DOUBLE && !state.canDouble) play = Action::HIT;
+    return play;
+  }
+  return std::nullopt;
+}
+
+ai::Action HiLoAgent::chooseAction(const ai::State &state,
+                                   const std::vector<ai::Action> &validActions,
+                                   bool training) {
+  if (indexPlays_ && state.countBucket != ai::COUNT_UNTRACKED) {
+    auto play = indexPlay(state, ai::trueCountOfBucket(state.countBucket));
+    if (play && std::find(validActions.begin(), validActions.end(), *play) !=
+                    validActions.end()) {
+      return *play;
+    }
+  }
+  return book_.chooseAction(state, validActions, training);
+}
+
+int HiLoAgent::chooseBet(const ai::BetContext &ctx, bool) {
+  const int bucket = ctx.countBucket != ai::COUNT_UNTRACKED
+                         ? ctx.countBucket
+                         : ai::countBucketFor(ctx.trueCount);
+  return std::max(ctx.minBet, rampUnits(ai::trueCountOfBucket(bucket), ctx.maxBet));
+}
+
 ai::Action RandomAgent::chooseAction(const ai::State &,
                                      const std::vector<ai::Action> &validActions,
                                      bool) {
@@ -299,9 +372,14 @@ EvaluationResult Evaluator::evaluate(ai::Agent *agent, size_t numGames,
   BlackjackGame game(rules_, nextDealSeed());
   double totalReward = 0.0;
   double totalRewardSq = 0.0;
+  // Betting sums for the per-unit-wagered ratio and its delta-method error.
+  double sumBet = 0.0, sumBetSq = 0.0, sumWon = 0.0, sumWonSq = 0.0, sumWonBet = 0.0;
 
   for (size_t i = 0; i < numGames; ++i) {
     double roundReward = 0.0;
+    const ai::BetContext ctx = betContext(game);
+    const double bet =
+        std::clamp(agent->chooseBet(ctx, false), ctx.minBet, ctx.maxBet);
     std::vector<Outcome> outcomes = playGame(agent, game);
     const std::vector<bool> &wasDoubled = game.getWasDoubledByHand();
 
@@ -337,6 +415,17 @@ EvaluationResult Evaluator::evaluate(ai::Agent *agent, size_t numGames,
     totalReward += roundReward;
     totalRewardSq += roundReward * roundReward;
     result.handsPlayed += outcomes.size();
+
+    const auto bucket = static_cast<size_t>(ctx.countBucket);
+    ++result.roundsByCount[bucket];
+    result.rewardByCount[bucket] += roundReward;
+
+    const double won = bet * roundReward;
+    sumBet += bet;
+    sumBetSq += bet * bet;
+    sumWon += won;
+    sumWonSq += won * won;
+    sumWonBet += won * bet;
   }
 
   // Outcome rates are per settled hand — a split round contributes two hands —
@@ -362,6 +451,21 @@ EvaluationResult Evaluator::evaluate(ai::Agent *agent, size_t numGames,
                        : 0.0;
   }
 
+  const double n = static_cast<double>(numGames);
+  if (numGames > 0 && sumBet > 0.0) {
+    result.avgBet = sumBet / n;
+    result.wonPerRound = sumWon / n;
+    const double ratio = sumWon / sumBet;
+    result.evPerUnitBet = ratio;
+    if (numGames > 1) {
+      // Var of W - R*B around zero, divided by mean bet squared.
+      const double resid =
+          (sumWonSq - 2.0 * ratio * sumWonBet + ratio * ratio * sumBetSq) / (n - 1.0);
+      result.evPerUnitStdErr =
+          resid > 0.0 ? std::sqrt(resid / n) / result.avgBet : 0.0;
+    }
+  }
+
   // Compare with basic strategy
   if (compareStrategy) {
     result.strategyAccuracy = compareWithBasicStrategy(agent);
@@ -382,7 +486,8 @@ std::vector<Outcome> Evaluator::playGame(ai::Agent *agent, BlackjackGame &game) 
     const Hand &dealerHand = game.getDealerHand(true);
 
     ai::State state = ai::GameStateConverter::toAIState(
-        playerHand, dealerHand, game.canSplit(), game.canDoubleDown());
+        playerHand, dealerHand, game.canSplit(), game.canDoubleDown(),
+        ai::GameStateConverter::countBucketFor(*agent, game));
     std::vector<ai::Action> validActions =
         ai::GameStateConverter::getValidActions(
             playerHand, game.canSplit(), game.canDoubleDown(),
@@ -417,6 +522,31 @@ BaselineComparison Evaluator::compareAgainstBaselines(ai::Agent *agent,
   return cmp;
 }
 
+ai::BetContext Evaluator::betContext(BlackjackGame &game) const {
+  game.reshuffleIfDue();
+  ai::BetContext ctx;
+  ctx.trueCount = game.getTrueCount();
+  ctx.countBucket = ai::countBucketFor(ctx.trueCount);
+  ctx.minBet = 1;
+  ctx.maxBet = std::max(1, rules_.maxBetUnits);
+  return ctx;
+}
+
+void Evaluator::calibrateBets(ai::Agent *agent, size_t rounds) {
+  BlackjackGame game(rules_, nextDealSeed());
+  for (size_t i = 0; i < rounds; ++i) {
+    const ai::BetContext ctx = betContext(game);
+    std::vector<Outcome> outcomes = playGame(agent, game);
+    const std::vector<bool> &doubled = game.getWasDoubledByHand();
+    double reward = 0.0;
+    for (size_t j = 0; j < outcomes.size(); ++j) {
+      reward += ai::GameStateConverter::outcomeToReward(
+          outcomes[j], j < doubled.size() && doubled[j], rules_.blackjackPayout);
+    }
+    agent->learnBet(ctx, reward);
+  }
+}
+
 double Evaluator::compareWithBasicStrategy(ai::Agent *agent) {
   return auditPolicy(agent).accuracy;
 }
@@ -435,9 +565,10 @@ PolicyAudit Evaluator::auditPolicy(ai::Agent *agent) {
       // resulting argmax is an artefact of initialisation, not a decision, so
       // scoring it would measure nothing. States like these are reported as
       // coverage gaps instead.
+      const ai::State asked = auditView(*agent, entry.state);
       bool trained = true;
       for (ai::Action action : entry.validActions) {
-        if (agent->getVisitCount(entry.state, action) == 0) {
+        if (agent->getVisitCount(asked, action) == 0) {
           trained = false;
           break;
         }
@@ -449,8 +580,7 @@ PolicyAudit Evaluator::auditPolicy(ai::Agent *agent) {
       }
 
       ++slot.scored;
-      ai::Action chosen =
-          agent->chooseAction(entry.state, entry.validActions, false);
+      ai::Action chosen = agent->chooseAction(asked, entry.validActions, false);
       if (basicStrategy_.isCorrectAction(entry.state, chosen, rules_.surrender)) {
         ++slot.matches;
       }

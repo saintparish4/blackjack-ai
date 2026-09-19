@@ -79,7 +79,9 @@ int main(int argc, char *argv[]) {
             << "Rules      : " << run.rulesPreset << " (" << run.training.gameRules.numDecks
             << " decks, " << (run.training.gameRules.dealerHitsSoft17 ? "H17" : "S17")
             << ", surrender " << (run.training.gameRules.surrender ? "on" : "off")
-            << ", blackjack pays " << run.training.gameRules.blackjackPayout << ")\n"
+            << ", blackjack pays " << run.training.gameRules.blackjackPayout
+            << ", penetration " << run.training.gameRules.penetration
+            << ", bets 1-" << run.training.gameRules.maxBetUnits << ")\n"
             << "Episodes   : " << run.training.numEpisodes << " per seed\n"
             << "Seeds      : " << seedBase << ".." << (seedBase + numSeeds - 1) << "\n"
             << "Eval rounds: " << evalRounds << " per policy per seed\n"
@@ -120,6 +122,9 @@ int main(int argc, char *argv[]) {
   try {
     writeResultsCsv((outDir / "results.csv").string(), results);
     writeSummaryCsv((outDir / "summary.csv").string(), results);
+    if (results.front().betting) {
+      writeCountProfileCsv((outDir / "count_profile.csv").string(), results);
+    }
   } catch (const std::exception &e) {
     std::cerr << "Error writing results: " << e.what() << "\n";
     return 1;

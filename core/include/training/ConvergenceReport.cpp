@@ -38,9 +38,10 @@ ConvergenceResult ConvergenceReport::analyze(ai::Agent& agent,
             // still the initial 0.0, which beats every genuinely negative
             // alternative, so the argmax is an initialisation artefact rather
             // than a learned decision.
+            const ai::State asked = auditView(agent, entry.state);
             bool trained = true;
             for (ai::Action action : entry.validActions) {
-                if (agent.getVisitCount(entry.state, action) == 0) {
+                if (agent.getVisitCount(asked, action) == 0) {
                     trained = false;
                     break;
                 }
@@ -52,7 +53,7 @@ ConvergenceResult ConvergenceReport::analyze(ai::Agent& agent,
 
             ++slot.scored;
             ai::Action agentAction =
-                agent.chooseAction(entry.state, entry.validActions, false);
+                agent.chooseAction(asked, entry.validActions, false);
 
             if (basicStrategy.isCorrectAction(entry.state, agentAction, allowSurrender)) {
                 ++slot.matches;
@@ -66,7 +67,7 @@ ConvergenceResult ConvergenceReport::analyze(ai::Agent& agent,
                 if (div.optimalAction == ai::Action::DOUBLE && !entry.state.canDouble) {
                     div.optimalAction = basicStrategy.fallbackWhenCannotDouble(entry.state);
                 }
-                div.qMargin       = computeQMargin(agent, entry.state, entry.validActions);
+                div.qMargin       = computeQMargin(agent, asked, entry.validActions);
                 div.isCritical    = isCriticalState(entry.state);
                 div.context       = context;
                 result.divergences.push_back(div);

@@ -80,6 +80,9 @@ RunConfig loadRunConfig(const util::ConfigParser &cfg,
       cfg.getString("alpha_schedule", "constant"));
   p.alphaOmega     = cfg.getDouble("alpha_omega", 0.8);
   p.alphaMin       = cfg.getDouble("alpha_min", 0.0);
+  p.useCount       = cfg.getBool("use_count", false);
+  p.learnBets      = cfg.getBool("learn_bets", false);
+  t.betCalibrationRounds = nonNegative(cfg, "bet_calibration_rounds", 2'000'000);
   if (!p.isValid()) {
     throw std::invalid_argument("invalid agent hyperparameters in config");
   }
@@ -99,6 +102,10 @@ RunConfig loadRunConfig(const util::ConfigParser &cfg,
     rules.surrender = cfg.getBool("surrender");
   if (cfg.has("blackjack_payout"))
     rules.blackjackPayout = cfg.getDouble("blackjack_payout");
+  if (cfg.has("max_bet")) {
+    rules.maxBetUnits = cfg.getInt("max_bet");
+    if (rules.maxBetUnits < 1) throw std::invalid_argument("max_bet must be >= 1");
+  }
   if (cfg.has("penetration")) {
     rules.penetration = cfg.getDouble("penetration");
     if (rules.penetration <= 0.0 || rules.penetration > 1.0) {
@@ -110,6 +117,8 @@ RunConfig loadRunConfig(const util::ConfigParser &cfg,
   // Reporting copies
   t.rulesPresetName = run.rulesPreset;
   t.agentName       = run.agentType;
+  if (p.useCount) t.agentName += ", counts (Hi-Lo)";
+  if (p.learnBets) t.agentName += ", learned bets";
   if (p.alphaSchedule == ai::AlphaSchedule::VISIT) {
     std::ostringstream alpha;
     alpha << " (alpha = max(" << p.alphaMin << ", 1/(n+1)^" << p.alphaOmega << "))";

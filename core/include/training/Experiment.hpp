@@ -2,6 +2,7 @@
 
 #include "Evaluator.hpp"
 #include "RunConfig.hpp"
+#include <array>
 #include <cstdint>
 #include <ostream>
 #include <string>
@@ -18,6 +19,16 @@ struct SeedResult {
   PolicyAudit audit;         ///< Cell-match accuracy, split by hand context
   size_t statesLearned = 0;
   double trainSeconds = 0.0; ///< Wall clock; the only nondeterministic field
+
+  // ---- Betting runs (GameRules::maxBetUnits > 1) ----
+  bool betting = false;
+  EvaluationResult hiLo;      ///< Basic strategy + 1-8 ramp
+  EvaluationResult hiLoIndex; ///< Same + Illustrious 18 index plays
+  /// The agent's calibrated edge, sample count and chosen bet by count bucket
+  /// (zeros if it doesn't learn bets).
+  std::array<double, 16> learnedEdge{};
+  std::array<uint64_t, 16> learnedSamples{};
+  std::array<int, 16> learnedBet{};
 };
 
 /** Across-seed spread of one metric. */
@@ -52,6 +63,11 @@ void writeResultsCsv(const std::string &path,
 /** One row per metric: mean, sd, ci95, min, max across seeds. */
 void writeSummaryCsv(const std::string &path,
                      const std::vector<SeedResult> &results);
+
+/** Edge by true count for every policy, plus the agent's learned bets
+ *  (betting runs only). One row per seed x policy x count bucket. */
+void writeCountProfileCsv(const std::string &path,
+                          const std::vector<SeedResult> &results);
 
 /** Human-readable per-seed table plus the across-seed summary. */
 void printResultsTable(const std::vector<SeedResult> &results, std::ostream &out);

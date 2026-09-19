@@ -154,6 +154,7 @@ set(TEST_SOURCES
     tests/test_argparser.cpp
     tests/test_lab_bench.cpp
     tests/test_agents.cpp
+    tests/test_counting.cpp
 )
 
 add_executable(run_tests ${TEST_SOURCES})

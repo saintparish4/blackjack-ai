@@ -127,8 +127,10 @@ void StrategyChart::printHeader(std::ostream &out) {
 
 void StrategyChart::printCell(ai::Agent &agent,
                               const BasicStrategy &basicStrategy,
-                              const ai::State &state, std::ostream &out,
+                              const ai::State &cell, std::ostream &out,
                               bool useColor, bool allowSurrender) const {
+  // A counting agent's chart is its policy at a true count of zero.
+  const ai::State state = auditView(agent, cell);
   std::vector<ai::Action> valid = validActionsForState(state, allowSurrender);
 
   for (ai::Action action : valid) {

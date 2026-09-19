@@ -151,6 +151,18 @@ TrainingMetrics Trainer::trainEpisodes(size_t numEpisodes) {
     progressBar.update(episode + 1 - startEpisode, info);
   }
 
+  // A bet-learning agent measures its own edge at each count, playing
+  // greedily on a separate shoe, before anything evaluates it.
+  if (agent_->learnsBets() && config_.betCalibrationRounds > 0) {
+    if (config_.verbose) {
+      std::cout << "\nCalibrating bets over " << config_.betCalibrationRounds
+                << " greedy rounds...\n";
+    }
+    Evaluator calibrator(config_.gameRules,
+                         streamSeed(config_.seed, util::SeedStream::BET_CALIBRATION));
+    calibrator.calibrateBets(agent_.get(), config_.betCalibrationRounds);
+  }
+
   // Final evaluation
   if (config_.verbose) {
     std::cout << "\nRunning final evaluation...\n";
@@ -233,7 +245,8 @@ void Trainer::playAgentTurn(std::vector<ai::Experience> &experiences,
     const Hand &dealerHand = game_->getDealerHand(true);
 
     ai::State currentState = ai::GameStateConverter::toAIState(
-        playerHand, dealerHand, game_->canSplit(), game_->canDoubleDown());
+        playerHand, dealerHand, game_->canSplit(), game_->canDoubleDown(),
+        ai::GameStateConverter::countBucketFor(*agent_, *game_));
 
     std::vector<ai::Action> validActions =
         ai::GameStateConverter::getValidActions(
@@ -261,7 +274,8 @@ void Trainer::playAgentTurn(std::vector<ai::Experience> &experiences,
     if (!game_->isRoundComplete()) {
       nextState = ai::GameStateConverter::toAIState(
           game_->getPlayerHand(), game_->getDealerHand(true),
-          game_->canSplit(), game_->canDoubleDown());
+          game_->canSplit(), game_->canDoubleDown(),
+          ai::GameStateConverter::countBucketFor(*agent_, *game_));
       nextValidActions = ai::GameStateConverter::getValidActions(
           game_->getPlayerHand(), game_->canSplit(), game_->canDoubleDown(),
           game_->canSurrender());
@@ -279,7 +293,8 @@ void Trainer::playAgentTurn(std::vector<ai::Experience> &experiences,
       const Hand &second = game_->getPlayerHands()[1];
       experiences.back().secondNextState = ai::GameStateConverter::toAIState(
           second, game_->getDealerHand(true), game_->canSplit(),
-          game_->canDoubleDown());
+          game_->canDoubleDown(),
+          ai::GameStateConverter::countBucketFor(*agent_, *game_));
       experiences.back().secondValidNextActions =
           ai::GameStateConverter::getValidActions(second, game_->canSplit(),
                                                   game_->canDoubleDown(),
@@ -643,6 +658,17 @@ void Trainer::runAndSaveReport(const TrainingMetrics &finalMetrics) {
         << std::setprecision(1) << (cmp.gapRecovered * 100)
         << "% of the random-to-book range\n";
   }
+  if (config_.gameRules.maxBetUnits > 1) {
+    oss << "\n--- Betting (1-" << config_.gameRules.maxBetUnits
+        << " units, EV per unit wagered) ---\n";
+    oss << std::setw(24) << "Agent" << ": " << std::setprecision(4)
+        << agentResult.evPerUnitBet << " +/- " << (1.96 * agentResult.evPerUnitStdErr)
+        << " (avg bet " << std::setprecision(2) << agentResult.avgBet << ")\n";
+    oss << std::setw(24) << "Basic strategy (flat)" << ": " << std::setprecision(4)
+        << bookResult.evPerUnitBet << " +/- " << (1.96 * bookResult.evPerUnitStdErr) << "\n";
+    oss << std::setprecision(4);
+  }
+
   // Per settled hand, over the same rounds as the EV line: the "Final
   // Performance" rates above come from the last eval_games-round evaluation
   // and carry a margin of several points.

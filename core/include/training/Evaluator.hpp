@@ -3,6 +3,7 @@
 #include "../ai/Agent.hpp"
 #include "../game/BlackjackGame.hpp"
 #include "../game/GameRules.hpp"
+#include <array>
 #include <map>
 #include <optional>
 #include <random>
@@ -38,6 +39,20 @@ struct EvaluationResult {
   /// to per-round variance (~1.15), so a bare mean is not comparable between
   /// two agents without it.
   double rewardStdErr;
+
+  // ---- Betting. With flat bets these equal avgReward / rewardStdErr. ----
+
+  double avgBet = 1.0;          ///< Mean units wagered per round
+  /// Units won per unit wagered: the player's edge including bet sizing. A
+  /// counter's avgReward ignores its bets and measures only how it plays.
+  double evPerUnitBet = 0.0;
+  double evPerUnitStdErr = 0.0; ///< Delta-method standard error of the ratio
+  double wonPerRound = 0.0;     ///< Units won per round (bet x reward)
+
+  /// Rounds and summed per-unit reward by the true-count bucket the round was
+  /// dealt at: the policy's edge as a function of the count.
+  std::array<uint64_t, 16> roundsByCount{};
+  std::array<double, 16> rewardByCount{};
 
   EvaluationResult()
       : gamesPlayed(0), handsPlayed(0), wins(0), losses(0), pushes(0),
@@ -229,6 +244,47 @@ private:
 };
 
 /**
+ * @brief Textbook Hi-Lo counter: basic strategy plus a bet ramp, optionally
+ * with the Illustrious 18 index plays.
+ *
+ * The reference a learned counter has to beat, run through the same Evaluator,
+ * engine and rules. Insurance, the first of the Illustrious 18, is left out
+ * because this table doesn't offer it; the other 17 are Schlesinger's S17
+ * multi-deck indices.
+ */
+class HiLoAgent : public ai::Agent {
+public:
+  explicit HiLoAgent(const GameRules &rules = GameRules{}, bool indexPlays = false)
+      : book_(rules), indexPlays_(indexPlays) {}
+
+  ai::Action chooseAction(const ai::State &state,
+                          const std::vector<ai::Action> &validActions,
+                          bool training = true) override;
+  int chooseBet(const ai::BetContext &ctx, bool training = false) override;
+  bool usesCount() const override { return true; }
+
+  void learn(const ai::Experience &) override {}
+  double getQValue(const ai::State &, ai::Action) const override { return 0.0; }
+  void save(const std::string &) const override {}
+  void load(const std::string &) override {}
+  std::string getName() const override {
+    return indexPlays_ ? "Hi-Lo + Illustrious 18" : "Hi-Lo";
+  }
+
+  /** A common 1-8 ramp: 1 unit up to TC +1, then 2, 4, 6 and 8 from +2 to
+   *  +5, capped at maxBet. */
+  static int rampUnits(int trueCountFloor, int maxBet);
+
+  /** The index play for this hand at this count, if one applies. */
+  static std::optional<ai::Action> indexPlay(const ai::State &state,
+                                             int trueCountFloor);
+
+private:
+  BasicStrategyAgent book_;
+  bool indexPlays_;
+};
+
+/**
  * @brief Picks uniformly at random from the legal actions. Lower-bound baseline.
  *
  * Anchors the scale: without it, "-0.058 per round" has no reference telling
@@ -296,6 +352,17 @@ public:
                                              uint32_t baselineSeed = 1234);
 
   /**
+   * @brief Teach a bet-learning agent its edge at each count.
+   *
+   * Plays `rounds` rounds greedily (no exploration, no Q updates) and feeds
+   * each round's per-unit result to agent->learnBet at the count it was dealt
+   * at. Measuring the greedy policy, not the exploring one used in training,
+   * matters: ε = 0.05 of random moves costs a few percent per round and would
+   * push every edge below zero.
+   */
+  void calibrateBets(ai::Agent *agent, size_t rounds);
+
+  /**
    * @brief Compare agent's strategy with basic strategy via exhaustive iteration
    *
    * Iterates all valid (playerTotal 4-21) x (dealerCard 1-10) x (soft/hard)
@@ -333,6 +400,21 @@ private:
    * @return One outcome per player hand (multiple after split).
    */
   std::vector<Outcome> playGame(ai::Agent *agent, BlackjackGame &game);
+
+  /** Reshuffle if due, then read the count the next round's bet sees. */
+  ai::BetContext betContext(BlackjackGame &game) const;
 };
+
+/**
+ * @brief The state an audit should ask this agent about.
+ *
+ * A counting agent keys its Q-table by count, so it has no policy at all at
+ * COUNT_UNTRACKED; audit it at a true count of zero, where basic strategy is
+ * the right answer.
+ */
+inline ai::State auditView(const ai::Agent &agent, ai::State state) {
+  if (agent.usesCount()) state.countBucket = ai::NEUTRAL_COUNT_BUCKET;
+  return state;
+}
 } // namespace training
 } // namespace blackjack

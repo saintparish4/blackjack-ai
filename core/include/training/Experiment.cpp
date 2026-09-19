@@ -35,6 +35,22 @@ struct Metric {
   std::function<double(const SeedResult &)> get;
 };
 
+const std::vector<Metric> &bettingMetrics() {
+  static const std::vector<Metric> m = {
+      {"agent_ev_per_bet", "agent EV / unit bet", 1.0,
+       [](const SeedResult &r) { return r.cmp.agent.evPerUnitBet; }},
+      {"agent_avg_bet", "agent avg bet", 1.0,
+       [](const SeedResult &r) { return r.cmp.agent.avgBet; }},
+      {"hilo_ev_per_bet", "Hi-Lo EV / unit bet", 1.0,
+       [](const SeedResult &r) { return r.hiLo.evPerUnitBet; }},
+      {"hilo_i18_ev_per_bet", "Hi-Lo+I18 EV / unit", 1.0,
+       [](const SeedResult &r) { return r.hiLoIndex.evPerUnitBet; }},
+      {"hilo_avg_bet", "Hi-Lo avg bet", 1.0,
+       [](const SeedResult &r) { return r.hiLo.avgBet; }},
+  };
+  return m;
+}
+
 const std::vector<Metric> &metrics() {
   static const std::vector<Metric> m = {
       {"agent_ev", "agent EV / round", 1.0,
@@ -123,6 +139,23 @@ SeedResult runSeed(const RunConfig &run, uint32_t seed, size_t evalRounds,
       util::deriveSeed(seed, util::SeedStream::BASELINE));
   result.audit = evaluator.auditPolicy(agent.get());
 
+  if (config.gameRules.maxBetUnits > 1) {
+    result.betting = true;
+    HiLoAgent hiLo(config.gameRules, /*indexPlays=*/false);
+    HiLoAgent hiLoIndex(config.gameRules, /*indexPlays=*/true);
+    result.hiLo = evaluator.evaluate(&hiLo, evalRounds, false);
+    result.hiLoIndex = evaluator.evaluate(&hiLoIndex, evalRounds, false);
+    for (int b = 1; b <= ai::countBucketFor(ai::MAX_TRUE_COUNT); ++b) {
+      const auto i = static_cast<size_t>(b);
+      result.learnedEdge[i] = agent->betValue(b);
+      result.learnedSamples[i] = agent->betSamples(b);
+      ai::BetContext ctx;
+      ctx.countBucket = b;
+      ctx.maxBet = config.gameRules.maxBetUnits;
+      result.learnedBet[i] = agent->chooseBet(ctx, false);
+    }
+  }
+
   if (!outDir.empty()) {
     agent->save(outDir + "/agent");
     agent->exportQTable(outDir + "/q_table.csv");
@@ -134,10 +167,17 @@ void writeResultsCsv(const std::string &path,
                      const std::vector<SeedResult> &results) {
   std::ofstream file;
   openForWrite(file, path);
+  const bool betting = !results.empty() && results.front().betting;
   file << "seed,episodes,agent_ev,agent_se,book_ev,book_se,random_ev,random_se,"
           "gap_recovered,accuracy,two_card_accuracy,multi_card_accuracy,"
           "pair_accuracy,two_card_scored,multi_card_scored,pair_scored,"
-          "unscored_states,states_learned\n";
+          "unscored_states,states_learned";
+  if (betting) {
+    file << ",agent_ev_per_bet,agent_ev_per_bet_se,agent_avg_bet,"
+            "hilo_ev_per_bet,hilo_ev_per_bet_se,hilo_avg_bet,"
+            "hilo_i18_ev_per_bet,hilo_i18_ev_per_bet_se,hilo_i18_avg_bet";
+  }
+  file << "\n";
   file << std::fixed << std::setprecision(6);
   for (const auto &r : results) {
     file << r.seed << "," << r.episodes << "," << r.cmp.agent.avgReward << ","
@@ -150,7 +190,39 @@ void writeResultsCsv(const std::string &path,
          << r.audit.pairs.scored << ","
          << (r.audit.twoCard.untrained + r.audit.multiCard.untrained +
              r.audit.pairs.untrained)
-         << "," << r.statesLearned << "\n";
+         << "," << r.statesLearned;
+    if (betting) {
+      for (const EvaluationResult *e : {&r.cmp.agent, &r.hiLo, &r.hiLoIndex}) {
+        file << "," << e->evPerUnitBet << "," << e->evPerUnitStdErr << "," << e->avgBet;
+      }
+    }
+    file << "\n";
+  }
+}
+
+void writeCountProfileCsv(const std::string &path,
+                          const std::vector<SeedResult> &results) {
+  std::ofstream file;
+  openForWrite(file, path);
+  file << "seed,policy,count_bucket,true_count,rounds,mean_reward,"
+          "learned_edge,learned_samples,learned_bet\n";
+  file << std::fixed << std::setprecision(6);
+  for (const auto &r : results) {
+    const std::pair<const char *, const EvaluationResult *> policies[] = {
+        {"agent", &r.cmp.agent}, {"basic_strategy", &r.cmp.book},
+        {"hilo", &r.hiLo}, {"hilo_i18", &r.hiLoIndex}};
+    for (const auto &[name, e] : policies) {
+      for (int b = 1; b <= ai::countBucketFor(ai::MAX_TRUE_COUNT); ++b) {
+        const auto i = static_cast<size_t>(b);
+        const uint64_t n = e->roundsByCount[i];
+        const bool agent = std::string(name) == "agent";
+        file << r.seed << "," << name << "," << b << "," << ai::trueCountOfBucket(b)
+             << "," << n << "," << (n ? e->rewardByCount[i] / static_cast<double>(n) : 0.0)
+             << "," << (agent ? r.learnedEdge[i] : 0.0) << ","
+             << (agent ? r.learnedSamples[i] : 0) << "," << (agent ? r.learnedBet[i] : 0)
+             << "\n";
+      }
+    }
   }
 }
 
@@ -160,9 +232,14 @@ void writeSummaryCsv(const std::string &path,
   openForWrite(file, path);
   file << "metric,seeds,mean,sd,ci95,min,max\n";
   file << std::fixed << std::setprecision(6);
-  for (const Metric &m : metrics()) {
-    Spread s = summarize(column(results, m));
-    file << m.key << "," << results.size() << "," << s.mean << "," << s.sd << ","
+  std::vector<const Metric *> all;
+  for (const Metric &m : metrics()) all.push_back(&m);
+  if (!results.empty() && results.front().betting) {
+    for (const Metric &m : bettingMetrics()) all.push_back(&m);
+  }
+  for (const Metric *m : all) {
+    Spread s = summarize(column(results, *m));
+    file << m->key << "," << results.size() << "," << s.mean << "," << s.sd << ","
          << s.ci95 << "," << s.min << "," << s.max << "\n";
   }
 }
@@ -191,11 +268,35 @@ void printResultsTable(const std::vector<SeedResult> &results,
         << (r.audit.pairs.accuracy() * 100) << "\n";
   }
 
+  if (!results.empty() && results.front().betting) {
+    out << "\nBetting: EV per unit wagered (95% CI), average bet in units\n";
+    out << std::right << std::setw(6) << "seed" << std::setw(24) << "agent"
+        << std::setw(7) << "bet" << std::setw(24) << "Hi-Lo" << std::setw(7) << "bet"
+        << std::setw(24) << "Hi-Lo + I18" << "\n";
+    out << std::string(92, '-') << "\n";
+    for (const auto &r : results) {
+      out << std::fixed << std::setw(6) << r.seed;
+      const EvaluationResult *cols[] = {&r.cmp.agent, &r.hiLo, &r.hiLoIndex};
+      for (int c = 0; c < 3; ++c) {
+        out << std::setprecision(4) << std::setw(14) << cols[c]->evPerUnitBet << " +/- "
+            << std::setw(5) << (1.96 * cols[c]->evPerUnitStdErr);
+        if (c < 2) out << std::setprecision(2) << std::setw(7) << cols[c]->avgBet;
+      }
+      out << "\n";
+    }
+  }
+
   out << "\nAcross " << results.size() << " seed(s)   "
       << std::setw(10) << "mean" << std::setw(10) << "sd" << std::setw(11)
       << "95% CI" << std::setw(10) << "min" << std::setw(10) << "max" << "\n";
   out << std::string(72, '-') << "\n";
-  for (const Metric &m : metrics()) {
+  std::vector<const Metric *> all;
+  for (const Metric &m : metrics()) all.push_back(&m);
+  if (!results.empty() && results.front().betting) {
+    for (const Metric &m : bettingMetrics()) all.push_back(&m);
+  }
+  for (const Metric *mp : all) {
+    const Metric &m = *mp;
     Spread s = summarize(column(results, m));
     const int p = m.scale > 1.0 ? 2 : 4;
     out << std::left << std::setw(22) << m.label << std::right << std::fixed
