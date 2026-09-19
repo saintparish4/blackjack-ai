@@ -68,6 +68,19 @@ public:
   constexpr bool isAce() const noexcept { return rank_ == Rank::ACE; }
 
   /**
+   * @brief Hi-Lo counting tag: 2-6 are +1, 7-9 are 0, tens and aces are -1.
+   *
+   * A deck sums to zero, so a running count of the cards seen tracks how
+   * rich the rest of the shoe is in tens and aces, which favour the player.
+   */
+  constexpr int hiLo() const noexcept {
+    const int v = getValue();
+    if (v >= 2 && v <= 6) return 1;
+    if (v >= 7 && v <= 9) return 0;
+    return -1;
+  }
+
+  /**
    * @brief Get string representation of rank
    */
   std::string getRankString() const;

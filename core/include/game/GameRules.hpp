@@ -14,6 +14,9 @@ struct GameRules {
     int maxSplits = 3;
     bool surrender = false;
     double penetration = 0.75;  // fraction of shoe dealt before reshuffle
+    /// Largest bet the player may place, in units of the minimum bet. 1 means
+    /// flat betting, which every non-counting run uses.
+    int maxBetUnits = 1;
 
     /** Returns stake + winnings (blackjack uses blackjackPayout multiplier). */
     double getPayout(double bet, bool isBlackjack) const {

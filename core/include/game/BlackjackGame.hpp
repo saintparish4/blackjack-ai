@@ -68,6 +68,27 @@ namespace blackjack {
         /** hideHoleCard: true to show only upcard (e.g. during player turn). */
         Hand getDealerHand(bool hideHoleCard = false) const;
 
+        /**
+         * @brief Reshuffle now if the shoe has passed its penetration.
+         *
+         * startRound() does this itself. Call it first when a decision has
+         * to be made before the deal, such as a bet sized by the count, so
+         * the count it reads belongs to the shoe the round is dealt from.
+         * @return true if the shoe was reshuffled.
+         */
+        bool reshuffleIfDue();
+
+        /** Hi-Lo running count of every card the player has seen since the
+         *  last shuffle. The dealer's hole card joins it only once revealed. */
+        int getRunningCount() const { return runningCount_; }
+
+        /** Decks the player hasn't seen yet: the undealt shoe plus a hole card
+         *  still face down. */
+        double getDecksRemaining() const;
+
+        /** Running count per unseen deck: the standard Hi-Lo true count. */
+        double getTrueCount() const;
+
         bool canDoubleDown() const;
         /** True if current hand can split and no split has been used this round. */
         bool canSplit() const;
@@ -89,6 +110,14 @@ namespace blackjack {
         std::vector<Outcome> outcomes_;
         /** One bool per hand: true if that hand was doubled down. */
         std::vector<bool> doubledByHand_;
+
+        int runningCount_ = 0;
+        bool holeCounted_ = true;
+
+        /** Deal a card the player sees, adding it to the running count. */
+        Card dealVisible();
+        /** Count the dealer's hole card once it is turned over. */
+        void revealHoleCard();
 
         void playDealerHand();
         Outcome determineOutcome(const Hand& playerHand) const;

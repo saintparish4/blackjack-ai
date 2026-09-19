@@ -1,4 +1,5 @@
 #include "BlackjackGame.hpp"
+#include <algorithm>
 #include <optional>
 #include <stdexcept>
 
@@ -31,18 +32,53 @@ BlackjackGame::BlackjackGame(const GameRules &rules,
       playerHands_(1), currentHandIndex_(0), splitUsed_(false),
       roundComplete_(false) {}
 
+Card BlackjackGame::dealVisible() {
+  Card card = deck_->deal();
+  runningCount_ += card.hiLo();
+  return card;
+}
+
+void BlackjackGame::revealHoleCard() {
+  if (!holeCounted_ && dealerHand_.size() >= 2) {
+    runningCount_ += dealerHand_.getCards()[1].hiLo();
+    holeCounted_ = true;
+  }
+}
+
+bool BlackjackGame::reshuffleIfDue() {
+  if (!deck_->needsReshuffle(rules_.penetration)) {
+    return false;
+  }
+  deck_->reset();
+  runningCount_ = 0;
+  return true;
+}
+
+double BlackjackGame::getDecksRemaining() const {
+  const size_t unseen = deck_->cardsRemaining() + (holeCounted_ ? 0 : 1);
+  return static_cast<double>(unseen) / 52.0;
+}
+
+double BlackjackGame::getTrueCount() const {
+  // Below a quarter deck the division amplifies a count of one or two into a
+  // wild true count; clamp the divisor rather than report noise as signal.
+  return static_cast<double>(runningCount_) / std::max(getDecksRemaining(), 0.25);
+}
+
 void BlackjackGame::startRound() {
   checkAndReshuffle();
 
   playerHands_.clear();
   playerHands_.emplace_back();
   Hand &single = playerHands_.back();
-  single.addCard(deck_->deal());
-  single.addCard(deck_->deal());
+  single.addCard(dealVisible());
+  single.addCard(dealVisible());
 
   dealerHand_.clear();
+  dealerHand_.addCard(dealVisible());
+  // Dealt face down: the player can't count it until the dealer turns it over.
   dealerHand_.addCard(deck_->deal());
-  dealerHand_.addCard(deck_->deal());
+  holeCounted_ = false;
 
   currentHandIndex_ = 0;
   splitUsed_ = false;
@@ -52,6 +88,7 @@ void BlackjackGame::startRound() {
   doubledByHand_.assign(1, false);
 
   if (playerHands_[0].isBlackjack() || dealerHand_.isBlackjack()) {
+    revealHoleCard();
     roundComplete_ = true;
     outcome_ = determineOutcome(playerHands_[0]);
     outcomes_.push_back(*outcome_);
@@ -64,7 +101,7 @@ bool BlackjackGame::hit() {
   }
 
   Hand &cur = playerHands_[currentHandIndex_];
-  cur.addCard(deck_->deal());
+  cur.addCard(dealVisible());
 
   if (cur.isBust()) {
     if (currentHandIndex_ + 1 < playerHands_.size()) {
@@ -97,7 +134,7 @@ bool BlackjackGame::doubleDown() {
 
   doubledByHand_[currentHandIndex_] = true;
   Hand &cur = playerHands_[currentHandIndex_];
-  cur.addCard(deck_->deal());
+  cur.addCard(dealVisible());
 
   if (cur.isBust()) {
     if (currentHandIndex_ + 1 < playerHands_.size()) {
@@ -122,6 +159,7 @@ bool BlackjackGame::surrender() {
   }
   outcome_ = Outcome::SURRENDER;
   outcomes_.assign(1, Outcome::SURRENDER);
+  revealHoleCard();
   roundComplete_ = true;
   return true;
 }
@@ -136,8 +174,8 @@ bool BlackjackGame::split() {
 
   Hand secondHand;
   secondHand.addCard(secondCard);
-  secondHand.addCard(deck_->deal());
-  first.addCard(deck_->deal());
+  secondHand.addCard(dealVisible());
+  first.addCard(dealVisible());
 
   playerHands_.push_back(std::move(secondHand));
   doubledByHand_.push_back(false);
@@ -211,6 +249,8 @@ bool BlackjackGame::canSurrender() const {
 
 void BlackjackGame::reset() {
   deck_->reset();
+  runningCount_ = 0;
+  holeCounted_ = true;
   playerHands_.clear();
   playerHands_.emplace_back();
   doubledByHand_.assign(1, false);
@@ -238,7 +278,7 @@ void BlackjackGame::playDealerHand() {
       break;
     }
 
-    dealerHand_.addCard(deck_->deal());
+    dealerHand_.addCard(dealVisible());
     if (dealerHand_.isBust()) {
       break;
     }
@@ -281,6 +321,7 @@ Outcome BlackjackGame::determineOutcome(const Hand &playerHand) const {
 }
 
 void BlackjackGame::finishRoundAndResolveOutcomes() {
+  revealHoleCard();
   playDealerHand();
   outcomes_.clear();
   for (const Hand &h : playerHands_) {
@@ -290,10 +331,6 @@ void BlackjackGame::finishRoundAndResolveOutcomes() {
   roundComplete_ = true;
 }
 
-void BlackjackGame::checkAndReshuffle() {
-  if (deck_->needsReshuffle(rules_.penetration)) {
-    deck_->reset();
-  }
-}
+void BlackjackGame::checkAndReshuffle() { reshuffleIfDue(); }
 
 } // namespace blackjack
