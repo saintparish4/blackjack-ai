@@ -90,6 +90,11 @@ Python commands assume you are in `analysis/` (or the directory containing `requ
 ## Install dependencies
 - pip install -r requirements.txt
 
+## Browser demo (from the repo root)
+- web/build.sh                          [ needs Emscripten; writes web/wasm/ ]
+- python3 -m http.server -d web 8000    [ open http://localhost:8000, add ?seed=N to replay a shoe ]
+- node web/test/smoke.mjs               [ 20,000 rounds through the page's API ]
+
 ## Rank experiment arms (from the repo root)
 - python analysis/leaderboard.py experiments/001-double-down/confirm
 - python analysis/leaderboard.py experiments/001-double-down/explore --markdown

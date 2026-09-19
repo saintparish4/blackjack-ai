@@ -6,7 +6,7 @@ through the same `Evaluator`, game engine and rules as the in-engine baselines.
 
 ## Scoreboard
 
-_Last updated 2026-09-19, after step 2 (teach it to double)._
+_Last updated 2026-09-19, after step 3 (browser demo)._
 
 | Area | Metric | Value | Reproduce with (from `core/`) |
 |------|--------|-------|-------------------------------|
@@ -21,14 +21,16 @@ _Last updated 2026-09-19, after step 2 (teach it to double)._
 | **Policy** | Accuracy: overall / two-card / multi-card / pairs | 94.9% / 92.9% / 97.8% / 92.0% | seed 1 |
 | | Book doubles (hard 9–11) the agent makes | 18 of 21 (was 3) | seed 1 strategy chart |
 | **Engine** | Basic strategy EV, 20M rounds | −0.0061 ± 0.0004 (published house edge for these rules: ≈ −0.005 to −0.006) | `./build/experiment --config ../config/tuned.cfg --seeds 4 --episodes 1000 --eval-rounds 5000000` |
-| **Engineering** | Unit tests | 150 passing, 8 suites | `./build/run_tests` |
+| **Engineering** | Unit tests | 152 passing, 9 suites | `./build/run_tests` |
 | | Training throughput | 1.1M episodes/s in the published run (machine shared with other jobs; 2.0–2.7M/s measured idle) | training report |
 | | Game simulation | 5.6–6.1M rounds/s (step 1 measurement) | `./build/benchmark` |
 | | Greedy decision latency | 3.9–4.5 ns (step 1 measurement) | `./build/benchmark` |
 | **Lab** | Experiments recorded | 2 ([`000`](../experiments/000-tuned-baseline/), [`001`](../experiments/001-double-down/)) | [`experiments/`](../experiments/) |
 | | Arms run in 001 | 18 explored, 7 confirmed | [`experiments/001-double-down/`](../experiments/001-double-down/) |
 | **Counting** | Learned counter's edge per unit bet | not started (step 4) | |
-| **Product** | Browser demo | not started (step 3) | |
+| **Product** | Browser demo | built and tested; goes live at https://saintparish4.github.io/blackjack-ai/ once pushed with Pages enabled | `web/build.sh`, then `python3 -m http.server -d web` |
+| | Demo payload | 261 KB wasm + 102 KB JS + 43 KB model | `web/build.sh` |
+| | Browser build vs C++ | 20,000 rounds at −0.0117/round (C++ evaluator: −0.0098 ± 0.0049); 221,749 smoke checks | `node web/test/smoke.mjs` |
 
 `±` is a 95% confidence interval. For a single run it comes from the per-round standard error over
 200,000 rounds. Across seeds it is a t-interval on the mean of the per-seed values.
@@ -37,10 +39,43 @@ _Last updated 2026-09-19, after step 2 (teach it to double)._
 
 - [x] **Step 1: lab bench.** Seeds, experiment runner, early stopping on accuracy or EV, payout fix.
 - [x] **Step 2: teach it to double.** Visit-scaled α wins; the shortfall to the book is 0.0017/round.
-- [ ] **Step 3: browser demo.** WebAssembly build, Play, Coach and Watch modes.
+- [x] **Step 3: browser demo.** WebAssembly build with Play, Coach and Watch modes, deployed by CI.
 - [ ] **Step 4: card counting.** Hi-Lo true count in the state, learned bet sizing.
 
 ## Milestones
+
+### Step 3: browser demo (2026-09-19)
+
+**What landed**
+
+- **`web/`:** a no-build page with three modes.
+  - **Play** grades each of your moves against the agent's Q-values: "the AI would hit; by its
+    estimate that cost you about 0.19 of a bet".
+  - **Coach** shows the agent's move, Q-value bars, confidence and a plain-English reason before
+    you act.
+  - **Watch the AI** steps through its decisions or auto-plays.
+  - Also: a 10-hand scorecard, and `?seed=N` to replay a shoe.
+- **`core/bindings/wasm/`:** the same engine, published model and basic strategy chart, compiled
+  with Emscripten. The model is the published `tuned.cfg` run, byte for byte.
+- **`ai/Explain.hpp`:** one source for the plain-English reasons, shared with `play --beginner`.
+- **CI (`pages.yml`):** builds the module with a pinned Emscripten, runs a Node smoke test through
+  the page's own API, and deploys to GitHub Pages from master.
+- Checked in headless Chromium at desktop and mobile sizes, with no console errors. Two CSS bugs
+  found that way were fixed: controls meant for another mode showing, and a blank selected tab.
+
+**Metrics at this milestone**
+
+| Metric | Value |
+|--------|-------|
+| First-visit download | ~406 KB (wasm 261 KB, JS 102 KB, model 43 KB) before compression |
+| Browser build EV, 20,000 rounds | −0.0117 per round (C++: −0.0098 ± 0.0049 on 200k) |
+| AI agrees with the book on live decisions | 94.9% of 26,947 |
+| Smoke-test checks | 221,749 |
+| Tests (C++) | 152 |
+
+**Not verifiable from here:** the public URL goes live only after a push to GitHub with Pages
+enabled (Settings → Pages → Source: GitHub Actions). Visitor analytics, the step's startup probe,
+aren't wired up yet.
 
 ### Step 2: teach it to double (2026-09-19)
 

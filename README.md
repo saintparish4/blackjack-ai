@@ -3,8 +3,12 @@
 [![CI](https://github.com/saintparish4/blackjack-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/saintparish4/blackjack-ai/actions/workflows/ci.yml)
 [![C++17](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus&logoColor=white)](https://en.cppreference.com/w/cpp/17)
 [![CMake](https://img.shields.io/badge/build-CMake-064F8C?logo=cmake&logoColor=white)](https://cmake.org/)
-[![Tests](https://img.shields.io/badge/tests-150%20passing-3fb950)](core/tests)
+[![Tests](https://img.shields.io/badge/tests-152%20passing-3fb950)](core/tests)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
+
+**▶ [Play it in your browser](https://saintparish4.github.io/blackjack-ai/)**: play against the
+engine and get coached by the AI, or watch it think. It's the same C++ compiled to WebAssembly, so
+nothing to install.
 
 A C++17 Q-learning agent that learns blackjack strategy from scratch through self-play — no rules,
 no lookup tables, no supervision. Starting from an all-zero Q-table, 5 million hands of trial and
@@ -17,8 +21,8 @@ policy audit measured against in-engine baselines, a seeded experiment runner th
 number reproducible, and Python visualisation scripts.
 
 **Where it's heading:** an experimental lab. The first experiment taught it to double
-([write-up](experiments/001-double-down/)). Next: put it in the browser, then teach it to count
-cards. Progress and every tracked metric live in
+([write-up](experiments/001-double-down/)), and the agent now runs in the browser
+([`web/`](web/)). Next: teach it to count cards. Progress and every tracked metric live in
 [`docs/progress.md`](docs/progress.md); experiment write-ups live in [`experiments/`](experiments/).
 
 <p align="center">
@@ -161,6 +165,7 @@ two algorithms takes several seeds each.
 | **Strategy validation** | Exhaustive convergence report vs basic strategy for the engine's rules (S17/H17 aware), split into two-card, multi-card and pair contexts, with coverage reporting |
 | **EV baselines** | In-engine basic-strategy and random-play agents; every run reports agent vs book vs random EV with confidence intervals |
 | **Color-coded chart** | Terminal strategy grid — green = correct, red = wrong, yellow = uncertain |
+| **Browser demo** | The engine, model and book chart compiled to WebAssembly; Play / Coach / Watch modes with Q-value bars, per-move cost estimates, a 10-hand scorecard and seeded replays; deployed to GitHub Pages by CI |
 | **Interactive play** | `./play --mode human|ai|advisor` — play yourself, watch the AI, or get move-by-move advice; `--seed` replays a session |
 | **Beginner mode** | Plain-English card explanations, chip balance, AI reasoning in natural language |
 | **INI config file** | All hyperparameters in `config/default.cfg` and `config/tuned.cfg`; CLI flags override config |
@@ -294,7 +299,28 @@ rather than a black box:
   on soft 20 and loses to a 21, and doubles 11 against a queen. Reproduce with <code>--seed 59</code>.</em>
 </p>
 
-### 5 — Visualise
+### 5 — Play in the browser
+
+The hosted version is at **https://saintparish4.github.io/blackjack-ai/**. To build it yourself you
+need [Emscripten](https://emscripten.org/docs/getting_started/):
+
+```bash
+web/build.sh                          # from the repo root: compiles core/ to WebAssembly
+python3 -m http.server -d web 8000    # open http://localhost:8000
+node web/test/smoke.mjs               # plays 20,000 rounds through the page's API
+```
+
+<p align="center">
+  <img src="docs/images/web_play.png" alt="Browser demo in Play mode: after standing on 12 against a 9, the AI explains it would have hit, and estimates the cost" width="820">
+</p>
+
+<p align="center">
+  <em>Play mode after standing on 12 against a 9. The AI shows its Q-values, says it would have hit,
+  and prices the difference at about 0.19 of a bet by its own estimate. Coach mode shows the same
+  panel before you move; Watch mode lets the AI play.</em>
+</p>
+
+### 6 — Visualise
 
 Python commands assume you are in the repo root (or the directory containing `analysis/`).
 
@@ -327,7 +353,7 @@ Generated plots:
 | `state_coverage.png` | Number of Q-table states visited over time |
 | `q_heatmap.png` | Best Q-value per (player total × dealer up-card) for hard totals |
 
-### 6 — Test
+### 7 — Test
 
 From `core/`:
 
@@ -342,10 +368,12 @@ cd build && ctest --output-on-failure
 ./build/run_tests --gtest_filter="TrainerTest.*"
 ```
 
-150 tests across 8 suites, run on every push against both GCC and Clang (see
+152 tests across 9 suites, run on every push against both GCC and Clang (see
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)). CI builds with `-Wall -Wextra -Werror
 -pedantic`, runs a separate ASan + UBSan job, smoke-tests the full train → evaluate → report → save
-pipeline, and runs the experiment runner twice to check its output is identical.
+pipeline, and runs the experiment runner twice to check its output is identical. A second workflow
+([`pages.yml`](.github/workflows/pages.yml)) builds the WebAssembly demo, runs its Node smoke test
+(about 220,000 checks over 20,000 rounds), and deploys it from master.
 
 Tests that sample random deals are sized so a spurious failure is vanishingly unlikely, and they
 account for the cases that make blackjack assertions subtle — a round can settle on the deal before
@@ -411,13 +439,14 @@ when it is actually passed — a flag's own default never silently outranks the 
 
 ```
 blackjack-ai/
-├── .github/workflows/     # CI: GCC + Clang build, tests, pipeline smoke test
+├── .github/workflows/     # CI: GCC + Clang, sanitizers, smoke tests; Pages deploy of the web demo
 ├── core/
 │   ├── include/
 │   │   ├── game/          # Card, Deck, Hand, BlackjackGame, GameRules
 │   │   ├── ai/            # TabularAgent + Q-learning / Expected SARSA / Double Q, State, PolicyTable, GameStateConverter
 │   │   ├── training/      # Trainer, Evaluator, Experiment, RunConfig, Logger, ConvergenceReport, StrategyChart
 │   │   └── util/          # ArgParser, ConfigParser, ProgressBar, Seed
+│   ├── bindings/wasm/     # Embind API for the browser demo
 │   ├── scripts/           # train.cpp, play.cpp, experiment.cpp, benchmark.cpp
 │   └── tests/             # 150 unit tests (Google Test)
 ├── analysis/
@@ -430,6 +459,7 @@ blackjack-ai/
 │   ├── default.cfg        # INI config template
 │   └── tuned.cfg          # Settings behind the published results
 ├── experiments/           # Lab notebook: one folder per experiment, with results CSVs
+├── web/                   # Browser demo: page, coaching logic, published model, smoke test
 └── docs/
     ├── images/            # Plots and terminal captures used in this README
     ├── progress.md        # Scoreboard of every tracked metric, updated per milestone
@@ -437,6 +467,8 @@ blackjack-ai/
 ```
 
 Three static libraries are linked together: `blackjack_game` → `blackjack_ai` → `blackjack_training`.
+Under Emscripten, CMake instead builds one `blackjack_wasm` module from the game and AI sources plus
+the basic strategy chart: no threads, tests or CLI tools.
 
 ### Layer 1 — Game Engine
 
@@ -536,7 +568,8 @@ in [`docs/progress.md`](docs/progress.md):
 1. **Lab bench** ✅ — seeds, a multi-seed experiment runner, early stopping on accuracy or EV.
 2. **Teach it to double** ✅ — visit-scaled α won; the shortfall to basic strategy fell from 0.026 to
    0.0017 per round ([write-up](experiments/001-double-down/)).
-3. **Browser demo** — the engine compiled to WebAssembly with Play, Coach and Watch-the-AI modes.
+3. **Browser demo** ✅ — the engine compiled to WebAssembly with Play, Coach and Watch-the-AI modes
+   ([`web/`](web/)).
 4. **Card counting** — a Hi-Lo true count in the state plus learned bet sizing, measured as EV per
    unit bet against flat-bet basic strategy and textbook Hi-Lo.
 
