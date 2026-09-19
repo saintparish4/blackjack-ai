@@ -34,6 +34,14 @@ Stay in `core/` for build and run. Executables live in `./build/`.
 - ./build/train --episodes 10000 --verbose
 - ./build/train --config ../config/default.cfg
 - ./build/train --config ../config/default.cfg --episodes 5000
+- ./build/train --config ../config/default.cfg --seed 42     [ reproducible run ]
+- ./build/train --config ../config/tuned.cfg                [ the published run, seed 1 ]
+
+### Experiment (one config over N seeds)
+- ./build/experiment --help
+- ./build/experiment --config ../config/tuned.cfg --seeds 5
+- ./build/experiment --config ../config/default.cfg --seeds 3 --episodes 200000 --out ../experiments --name my-sweep
+- ./build/experiment --config ../config/tuned.cfg --seeds 10 --seed-base 100 --threads 4
 
 ### Benchmark
 - ./build/benchmark --help
@@ -48,6 +56,7 @@ Stay in `core/` for build and run. Executables live in `./build/`.
 - ./build/play --mode human --hands 0
 - ./build/play --mode ai --model ./models/final_agent --hands 5
 - ./build/play --mode ai --model ./models/final_agent --hands 10 --beginner
+- ./build/play --mode ai --model ./models/final_agent --hands 2 --seed 1     [ replay a shoe ]
 - ./build/play --mode advisor --model ./models/final_agent --hands 5
 - ./build/play --mode advisor --model ./models/final_agent --hands 5 --beginner
 
@@ -80,3 +89,6 @@ Python commands assume you are in `analysis/` (or the directory containing `requ
 
 ## Install dependencies
 - pip install -r requirements.txt
+
+## Publish results (from the repo root)
+- analysis/publish_results.sh     [ retrains tuned.cfg (seed 1), rewrites docs/training_report.txt and docs/images/ ]

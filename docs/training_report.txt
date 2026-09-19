@@ -8,37 +8,41 @@ Num decks               : 6
 Dealer hits soft 17     : no
 Surrender enabled       : no
 Blackjack payout        : 1.5:1
+Agent                   : q-learning
 Learning rate           : 0.05
 Discount factor         : 0.95
 Epsilon start           : 1
-Epsilon decay           : 0.999999
+Epsilon decay           : 0.9999985
 Epsilon min             : 0.05
+Seed                    : 1
+Early stopping          : accuracy, patience 200
 Eval frequency          : 25000 episodes
 Eval games              : 2000
 
 --- Training Stats ---
 Total episodes          : 5000000
-Duration                : 1 seconds
-Episodes / sec          : 5000000
+Training time           : 1.99 s (includes periodic evaluations)
+Episodes / sec          : 2506611
 States learned          : 620
 Final epsilon           : 0.050000
 
 --- Final Performance ---
-Win rate                : 42.97%
-Loss rate               : 48.24%
-Push rate               : 8.80%
-Bust rate               : 20.44%
-Avg reward              : -0.0377
+Win rate                : 41.78%
+Loss rate               : 49.67%
+Push rate               : 8.56%
+Bust rate               : 18.64%
+Avg reward              : -0.0585
 
 --- Expected Value (per round, 200000 rounds per baseline) ---
-Agent                   : -0.0368 +/- 0.0045 (95% CI)
-Basic strategy          : -0.0034 +/- 0.0049 (95% CI)
-Random play             : -0.4442 +/- 0.0057 (95% CI)
-EV gap recovered        : 92.4% of the random-to-book range
+Agent                   : -0.0294 +/- 0.0045 (95% CI)
+Basic strategy          : -0.0023 +/- 0.0049 (95% CI)
+Random play             : -0.4458 +/- 0.0057 (95% CI)
+EV gap recovered        : 93.9% of the random-to-book range
+Agent win/loss/push     : 42.94% / 48.43% / 8.62% per hand
 
 === Strategy Chart ===
 Legend: UPPER=matches basic strategy  lower=diverges
-  margin<0.1 treated as uncertain
+  margin<0.05 is shown as uncertain in the colour chart
 Actions: H=Hit S=Stand D=Double P=Split R=Surrender  .=never trained
 
 --- Hard Totals ---
@@ -46,17 +50,17 @@ Actions: H=Hit S=Stand D=Double P=Split R=Surrender  .=never trained
 4       .  .  .  .  .  .  .  .  .  .
 5       H  H  H  H  H  H  H  H  H  H
 6       H  H  H  H  H  H  H  H  H  H
-7       H  H  H  H  H  H  H  H  H  H
+7       H  H  H  H  s  H  H  H  H  H
 8       H  H  H  H  H  H  H  H  H  H
 9       H  h  h  h  h  H  H  H  H  H
-10      h  h  h  h  h  h  h  h  d  H
-11      h  h  h  h  h  h  h  h  h  h
-12      H  H  h  h  S  H  H  H  H  H
-13      h  S  h  h  S  H  H  H  H  H
-14      h  S  S  S  S  H  H  s  H  H
-15      S  S  h  S  h  H  H  H  H  d
-16      h  S  S  S  S  H  H  H  H  H
-17      S  S  S  S  S  S  S  S  S  S
+10      h  h  h  h  h  h  h  h  H  H
+11      D  h  D  h  D  h  h  h  h  h
+12      H  H  h  h  h  H  H  H  H  H
+13      h  h  h  S  S  H  H  H  H  H
+14      S  S  S  S  S  H  H  H  H  H
+15      S  S  h  h  S  H  H  s  H  H
+16      S  S  h  S  S  H  H  H  H  H
+17      S  S  S  S  S  S  h  S  S  S
 18      S  S  S  S  S  S  S  S  S  S
 19      S  S  S  S  S  S  S  S  S  S
 20      S  S  S  S  S  S  S  S  S  S
@@ -65,71 +69,66 @@ Actions: H=Hit S=Stand D=Double P=Split R=Surrender  .=never trained
 --- Soft Totals ---
       2  3  4  5  6  7  8  9  T  A  
 13      H  H  H  H  H  H  H  H  H  H
-14      H  H  H  H  H  H  H  H  H  H
+14      H  H  d  H  H  H  H  H  H  H
 15      H  H  H  H  H  H  H  H  H  H
 16      H  H  H  H  H  H  H  H  H  H
 17      H  H  H  H  H  H  H  H  H  H
-18      h  h  h  h  h  S  h  H  H  H
-19      S  h  h  S  h  S  S  S  h  S
-20      S  S  S  S  d  S  S  S  S  S
+18      h  S  h  h  h  S  h  H  H  H
+19      S  S  S  S  S  S  S  S  S  S
+20      S  S  S  S  S  S  S  S  S  S
 21      .  .  .  .  .  .  .  .  .  .
 
 === Convergence Report ===
-Strategy accuracy : 86.2% (448/520 states)
-  two-card hands  : 81.2% (195/240)  -- doubling and surrender live here
-  multi-card hands: 90.4% (253/280)  -- hit/stand only
+Strategy accuracy : 87.3% (454/520 states)
+  two-card hands  : 84.6% (203/240)  -- doubling and surrender live here
+  multi-card hands: 89.6% (251/280)  -- hit/stand only
 Threshold         : 90.0%
 Status            : FAIL ✗
 Not scored        : 200 state(s) where some legal action was never trained
-Divergences       : 72 (22 critical, 50 minor)
+Divergences       : 66 (15 critical, 51 minor)
 
 Top 15 divergences (critical first, then by Q-value margin):
 State                     Agent       Optimal         Margin  Type    
 ----------------------------------------------------------------------
-hard 11 vs 9 [2card]      HIT         DOUBLE         0.4483  CRITICAL
-hard 16 vs 9 [multi]      STAND       HIT            0.3946  CRITICAL
-hard 11 vs A [2card]      HIT         DOUBLE         0.3590  CRITICAL
-soft 18 vs 8 [2card]      HIT         STAND          0.3544  CRITICAL
-hard 10 vs 9 [2card]      HIT         DOUBLE         0.3358  CRITICAL
-soft 18 vs 4 [multi]      HIT         STAND          0.2868  CRITICAL
-soft 18 vs 8 [multi]      HIT         STAND          0.1821  CRITICAL
-soft 18 vs 4 [2card]      HIT         STAND          0.1778  CRITICAL
-hard 14 vs 9 [2card]      STAND       HIT            0.1517  CRITICAL
-hard 11 vs 10 [2card]     HIT         DOUBLE         0.1411  CRITICAL
-soft 18 vs 6 [multi]      HIT         STAND          0.1282  CRITICAL
-soft 18 vs 5 [2card]      HIT         STAND          0.1199  CRITICAL
-soft 18 vs 2 [2card]      HIT         STAND          0.1004  CRITICAL
-hard 15 vs 10 [multi]     STAND       HIT            0.0865  CRITICAL
-soft 18 vs 5 [multi]      HIT         STAND          0.0740  CRITICAL
+hard 10 vs 9 [2card]      HIT         DOUBLE         0.4259  CRITICAL
+hard 11 vs A [2card]      HIT         DOUBLE         0.4142  CRITICAL
+hard 16 vs 10 [multi]     STAND       HIT            0.3478  CRITICAL
+hard 11 vs 10 [2card]     HIT         DOUBLE         0.3253  CRITICAL
+soft 18 vs 6 [multi]      HIT         STAND          0.3046  CRITICAL
+soft 18 vs 3 [multi]      HIT         STAND          0.2874  CRITICAL
+soft 18 vs 6 [2card]      HIT         STAND          0.2758  CRITICAL
+soft 18 vs 8 [multi]      HIT         STAND          0.2615  CRITICAL
+soft 18 vs 2 [2card]      HIT         STAND          0.2383  CRITICAL
+hard 11 vs 9 [2card]      HIT         DOUBLE         0.1999  CRITICAL
+hard 15 vs 7 [multi]      STAND       HIT            0.1251  CRITICAL
+soft 18 vs 5 [2card]      HIT         STAND          0.1182  CRITICAL
+soft 18 vs 8 [2card]      HIT         STAND          0.1165  CRITICAL
+hard 15 vs 9 [2card]      STAND       HIT            0.0927  CRITICAL
+soft 18 vs 4 [2card]      HIT         STAND          0.0738  CRITICAL
 
 Critical divergences:
-  hard 11 vs 9 [2card]     agent=HIT       optimal=DOUBLE    margin=0.4483
-  hard 16 vs 9 [multi]     agent=STAND     optimal=HIT       margin=0.3946
-  hard 11 vs A [2card]     agent=HIT       optimal=DOUBLE    margin=0.3590
-  soft 18 vs 8 [2card]     agent=HIT       optimal=STAND     margin=0.3544
-  hard 10 vs 9 [2card]     agent=HIT       optimal=DOUBLE    margin=0.3358
-  soft 18 vs 4 [multi]     agent=HIT       optimal=STAND     margin=0.2868
-  soft 18 vs 8 [multi]     agent=HIT       optimal=STAND     margin=0.1821
-  soft 18 vs 4 [2card]     agent=HIT       optimal=STAND     margin=0.1778
-  hard 14 vs 9 [2card]     agent=STAND     optimal=HIT       margin=0.1517
-  hard 11 vs 10 [2card]    agent=HIT       optimal=DOUBLE    margin=0.1411
-  soft 18 vs 6 [multi]     agent=HIT       optimal=STAND     margin=0.1282
-  soft 18 vs 5 [2card]     agent=HIT       optimal=STAND     margin=0.1199
-  soft 18 vs 2 [2card]     agent=HIT       optimal=STAND     margin=0.1004
-  hard 15 vs 10 [multi]    agent=STAND     optimal=HIT       margin=0.0865
-  soft 18 vs 5 [multi]     agent=HIT       optimal=STAND     margin=0.0740
-  soft 18 vs 2 [multi]     agent=HIT       optimal=STAND     margin=0.0495
-  soft 18 vs 3 [2card]     agent=HIT       optimal=STAND     margin=0.0304
-  soft 18 vs 6 [2card]     agent=HIT       optimal=STAND     margin=0.0291
-  soft 18 vs 3 [multi]     agent=HIT       optimal=STAND     margin=0.0288
-  soft 18 vs 10 [multi]    agent=STAND     optimal=HIT       margin=0.0283
-  hard 15 vs A [2card]     agent=DOUBLE    optimal=HIT       margin=0.0047
-  hard 10 vs 10 [2card]    agent=DOUBLE    optimal=HIT       margin=0.0005
+  hard 10 vs 9 [2card]     agent=HIT       optimal=DOUBLE    margin=0.4259
+  hard 11 vs A [2card]     agent=HIT       optimal=DOUBLE    margin=0.4142
+  hard 16 vs 10 [multi]    agent=STAND     optimal=HIT       margin=0.3478
+  hard 11 vs 10 [2card]    agent=HIT       optimal=DOUBLE    margin=0.3253
+  soft 18 vs 6 [multi]     agent=HIT       optimal=STAND     margin=0.3046
+  soft 18 vs 3 [multi]     agent=HIT       optimal=STAND     margin=0.2874
+  soft 18 vs 6 [2card]     agent=HIT       optimal=STAND     margin=0.2758
+  soft 18 vs 8 [multi]     agent=HIT       optimal=STAND     margin=0.2615
+  soft 18 vs 2 [2card]     agent=HIT       optimal=STAND     margin=0.2383
+  hard 11 vs 9 [2card]     agent=HIT       optimal=DOUBLE    margin=0.1999
+  hard 15 vs 7 [multi]     agent=STAND     optimal=HIT       margin=0.1251
+  soft 18 vs 5 [2card]     agent=HIT       optimal=STAND     margin=0.1182
+  soft 18 vs 8 [2card]     agent=HIT       optimal=STAND     margin=0.1165
+  hard 15 vs 9 [2card]     agent=STAND     optimal=HIT       margin=0.0927
+  soft 18 vs 4 [2card]     agent=HIT       optimal=STAND     margin=0.0738
 ==========================
 
 === Improvement Suggestions ===
-  • Strategy accuracy (86.2%) is below the 90% threshold.
+  • Strategy accuracy (87.3%) is below the 90% threshold.
     Try training for more episodes (e.g. 2M+) or reduce epsilon_decay.
-  • 22 critical state(s) diverge from basic strategy.
+  • 15 critical state(s) diverge from basic strategy.
     High-stakes hands (hard 16 vs strong dealer, hard 10/11) need more exploration.
+  • EV per round (-0.0294) is below basic strategy (-0.0023) and the 95% intervals do not overlap,
+    so the gap is real. The divergences above show where it leaks.
 ================================
