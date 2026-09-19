@@ -30,7 +30,7 @@ cp analysis/training_report.txt "$ROOT/docs/training_report.txt"
 
 # The colour chart and the AI hand come from the binaries' own terminal output.
 script -qc "$BUILD/play --report --model ./models/final_agent" /dev/null \
-    | "$PYTHON" "$ROOT/analysis/ansi_to_png.py" --head 44 \
+    | "$PYTHON" "$ROOT/analysis/ansi_to_png.py" --until "^Not scored|^Divergences" \
         -o "$ROOT/docs/images/strategy_chart.png"
 # Seed 1 deals a pair of 9s against a 7 in the second hand: a split the agent
 # makes and the book does not, which is a truer picture than a perfect hand.

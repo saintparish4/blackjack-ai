@@ -61,8 +61,11 @@ double TabularAgent::stepSize(uint32_t priorUpdates) const {
   if (params_.alphaSchedule == AlphaSchedule::CONSTANT) {
     return params_.learningRate;
   }
+  const double n = static_cast<double>(priorUpdates) + 1.0;
+  // ω = 1 is the common case and a plain division; std::pow on every update
+  // cost about a quarter of training throughput.
   const double alpha =
-      std::pow(static_cast<double>(priorUpdates) + 1.0, -params_.alphaOmega);
+      params_.alphaOmega == 1.0 ? 1.0 / n : std::pow(n, -params_.alphaOmega);
   return std::max(params_.alphaMin, alpha);
 }
 
