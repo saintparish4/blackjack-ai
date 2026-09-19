@@ -90,6 +90,12 @@ Python commands assume you are in `analysis/` (or the directory containing `requ
 ## Install dependencies
 - pip install -r requirements.txt
 
+## Card counting (from the repo root)
+- experiments/002-card-counting/run.sh explore     [ every arm on seeds 1-5 ]
+- experiments/002-card-counting/run.sh confirm     [ pre-registered arms on fresh seeds 101-110 ]
+- python analysis/leaderboard.py experiments/002-card-counting/confirm
+- python analysis/plot_counting.py experiments/002-card-counting/confirm/<arm> -o docs/images/counting_edge.png
+
 ## Browser demo (from the repo root)
 - web/build.sh                          [ needs Emscripten; writes web/wasm/ ]
 - python3 -m http.server -d web 8000    [ open http://localhost:8000, add ?seed=N to replay a shoe ]

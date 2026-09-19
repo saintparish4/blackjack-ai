@@ -22,7 +22,9 @@ namespace training {
 struct RunConfig {
   TrainingConfig training;
   ai::TabularAgent::Hyperparameters agentParams;
-  std::string agentType = "q-learning"; ///< q-learning | expected-sarsa | double-q
+  /// q-learning | expected-sarsa | double-q | basic-strategy (plays the book;
+  /// only its bets are learned, if learn_bets is set)
+  std::string agentType = "q-learning";
   std::string rulesPreset = "vegas-strip";
 };
 

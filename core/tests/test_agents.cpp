@@ -202,6 +202,23 @@ TEST(AgentTest, RunConfigBuildsEachAgentType) {
     std::filesystem::remove_all(dir);
   }
 
+  // basic-strategy: book play, and only the bets are learned.
+  {
+    auto dir = std::filesystem::temp_directory_path() / "bj_agents_book";
+    std::filesystem::create_directories(dir);
+    const std::string path = (dir / "b.cfg").string();
+    { std::ofstream f(path); f << "agent = basic-strategy\nlearn_bets = true\n"; }
+    util::ConfigParser cfg;
+    cfg.load(path);
+    auto book = makeAgent(loadRunConfig(cfg), 1u);
+    EXPECT_EQ(book->getName(), "Basic strategy + learned bets");
+    EXPECT_TRUE(book->learnsBets());
+    EXPECT_EQ(book->chooseAction(State(11, 6, false, false, true),
+                                 {Action::HIT, Action::STAND, Action::DOUBLE}, true),
+              Action::DOUBLE);
+    std::filesystem::remove_all(dir);
+  }
+
   util::ConfigParser empty;
   RunConfig defaults = loadRunConfig(empty);
   EXPECT_EQ(defaults.agentType, "q-learning");

@@ -3,6 +3,7 @@
 #include "../ai/ExpectedSarsaAgent.hpp"
 #include "../ai/QLearningAgent.hpp"
 #include "../util/Seed.hpp"
+#include "Evaluator.hpp"
 #include <sstream>
 #include <stdexcept>
 
@@ -30,6 +31,30 @@ size_t nonNegative(const util::ConfigParser &cfg, const std::string &key,
   }
   return static_cast<size_t>(v);
 }
+
+/**
+ * Plays basic strategy and learns only its bets. An ablation for experiment
+ * 002: with play fixed to the book, any difference from textbook Hi-Lo comes
+ * from how the bets are sized, not from how the hands are played.
+ */
+class BookBettorAgent : public ai::QLearningAgent {
+public:
+  BookBettorAgent(const GameRules &rules, const Hyperparameters &params,
+                  std::optional<uint32_t> seed)
+      : QLearningAgent(params, seed), book_(rules) {}
+
+  ai::Action chooseAction(const ai::State &state,
+                          const std::vector<ai::Action> &validActions,
+                          bool) override {
+    return book_.chooseAction(state, validActions, false);
+  }
+  void learn(const ai::Experience &) override {}
+  uint32_t getVisitCount(const ai::State &, ai::Action) const override { return 1; }
+  std::string getName() const override { return "Basic strategy + learned bets"; }
+
+private:
+  BasicStrategyAgent book_;
+};
 
 } // namespace
 
@@ -66,9 +91,10 @@ RunConfig loadRunConfig(const util::ConfigParser &cfg,
   // ---- Agent ----
   run.agentType = cfg.getString("agent", "q-learning");
   if (run.agentType != "q-learning" && run.agentType != "expected-sarsa" &&
-      run.agentType != "double-q") {
-    throw std::invalid_argument("unknown agent '" + run.agentType +
-                                "' (expected q-learning, expected-sarsa, double-q)");
+      run.agentType != "double-q" && run.agentType != "basic-strategy") {
+    throw std::invalid_argument(
+        "unknown agent '" + run.agentType +
+        "' (expected q-learning, expected-sarsa, double-q, basic-strategy)");
   }
   ai::TabularAgent::Hyperparameters &p = run.agentParams;
   p.learningRate   = cfg.getDouble("learning_rate", 0.1);
@@ -151,6 +177,10 @@ std::shared_ptr<ai::TabularAgent> makeAgent(const RunConfig &run,
   }
   if (run.agentType == "double-q") {
     return std::make_shared<ai::DoubleQLearningAgent>(run.agentParams, agentSeed);
+  }
+  if (run.agentType == "basic-strategy") {
+    return std::make_shared<BookBettorAgent>(run.training.gameRules,
+                                             run.agentParams, agentSeed);
   }
   return std::make_shared<ai::QLearningAgent>(run.agentParams, agentSeed);
 }
