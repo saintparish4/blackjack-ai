@@ -100,8 +100,14 @@ int TabularAgent::chooseBet(const BetContext &ctx, bool) {
                          ? ctx.countBucket
                          : countBucketFor(ctx.trueCount);
   const auto b = static_cast<size_t>(bucket);
-  return (betSamples_[b] >= MIN_BET_SAMPLES && betValue_[b] > 0.0) ? ctx.maxBet
-                                                                  : ctx.minBet;
+  if (betSamples_[b] < MIN_BET_SAMPLES || betValue_[b] <= 0.0) {
+    return ctx.minBet;
+  }
+  if (!params_.betProportional) {
+    return ctx.maxBet;
+  }
+  const long units = std::lround(betValue_[b] / params_.betUnitEdge);
+  return static_cast<int>(std::clamp<long>(units, ctx.minBet, ctx.maxBet));
 }
 
 void TabularAgent::learnBet(const BetContext &ctx, double perUnitReward) {
@@ -145,6 +151,8 @@ void TabularAgent::save(const std::string &filepath) const {
   metaFile << "state_space_size: " << qTable_.size() << "\n";
   metaFile << "use_count: " << (params_.useCount ? 1 : 0) << "\n";
   metaFile << "learn_bets: " << (params_.learnBets ? 1 : 0) << "\n";
+  metaFile << "bet_proportional: " << (params_.betProportional ? 1 : 0) << "\n";
+  metaFile << "bet_unit_edge: " << params_.betUnitEdge << "\n";
   for (int b = 1; b <= countBucketFor(MAX_TRUE_COUNT); ++b) {
     const auto i = static_cast<size_t>(b);
     if (betSamples_[i] == 0) continue;
@@ -185,6 +193,10 @@ void TabularAgent::load(const std::string &filepath) {
       params_.useCount = value == "1";
     } else if (key == "learn_bets") {
       params_.learnBets = value == "1";
+    } else if (key == "bet_proportional") {
+      params_.betProportional = value == "1";
+    } else if (key == "bet_unit_edge") {
+      params_.betUnitEdge = std::stod(value);
     } else if (key.rfind("bet_value_", 0) == 0 || key.rfind("bet_samples_", 0) == 0) {
       const bool isValue = key[4] == 'v';
       const size_t b = std::stoul(key.substr(isValue ? 10 : 12));

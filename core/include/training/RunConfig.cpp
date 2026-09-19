@@ -82,6 +82,12 @@ RunConfig loadRunConfig(const util::ConfigParser &cfg,
   p.alphaMin       = cfg.getDouble("alpha_min", 0.0);
   p.useCount       = cfg.getBool("use_count", false);
   p.learnBets      = cfg.getBool("learn_bets", false);
+  const std::string sizing = cfg.getString("bet_sizing", "max_when_positive");
+  if (sizing != "max_when_positive" && sizing != "proportional") {
+    throw std::invalid_argument("bet_sizing must be max_when_positive or proportional");
+  }
+  p.betProportional = sizing == "proportional";
+  p.betUnitEdge    = cfg.getDouble("bet_unit_edge", 0.0025);
   t.betCalibrationRounds = nonNegative(cfg, "bet_calibration_rounds", 2'000'000);
   if (!p.isValid()) {
     throw std::invalid_argument("invalid agent hyperparameters in config");
@@ -118,7 +124,10 @@ RunConfig loadRunConfig(const util::ConfigParser &cfg,
   t.rulesPresetName = run.rulesPreset;
   t.agentName       = run.agentType;
   if (p.useCount) t.agentName += ", counts (Hi-Lo)";
-  if (p.learnBets) t.agentName += ", learned bets";
+  if (p.learnBets) {
+    t.agentName += p.betProportional ? ", learned bets (proportional)"
+                                     : ", learned bets (max when positive)";
+  }
   if (p.alphaSchedule == ai::AlphaSchedule::VISIT) {
     std::ostringstream alpha;
     alpha << " (alpha = max(" << p.alphaMin << ", 1/(n+1)^" << p.alphaOmega << "))";

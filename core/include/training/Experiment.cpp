@@ -47,6 +47,18 @@ const std::vector<Metric> &bettingMetrics() {
        [](const SeedResult &r) { return r.hiLoIndex.evPerUnitBet; }},
       {"hilo_avg_bet", "Hi-Lo avg bet", 1.0,
        [](const SeedResult &r) { return r.hiLo.avgBet; }},
+      {"agent_won_per_100", "agent units / 100 rds", 100.0,
+       [](const SeedResult &r) { return r.cmp.agent.wonPerRound; }},
+      {"hilo_won_per_100", "Hi-Lo units / 100", 100.0,
+       [](const SeedResult &r) { return r.hiLo.wonPerRound; }},
+      {"hilo_i18_won_per_100", "Hi-Lo+I18 units / 100", 100.0,
+       [](const SeedResult &r) { return r.hiLoIndex.wonPerRound; }},
+      {"agent_di", "agent DI", 1.0,
+       [](const SeedResult &r) { return r.cmp.agent.desirabilityIndex(); }},
+      {"hilo_di", "Hi-Lo DI", 1.0,
+       [](const SeedResult &r) { return r.hiLo.desirabilityIndex(); }},
+      {"hilo_i18_di", "Hi-Lo+I18 DI", 1.0,
+       [](const SeedResult &r) { return r.hiLoIndex.desirabilityIndex(); }},
   };
   return m;
 }
@@ -173,9 +185,10 @@ void writeResultsCsv(const std::string &path,
           "pair_accuracy,two_card_scored,multi_card_scored,pair_scored,"
           "unscored_states,states_learned";
   if (betting) {
-    file << ",agent_ev_per_bet,agent_ev_per_bet_se,agent_avg_bet,"
-            "hilo_ev_per_bet,hilo_ev_per_bet_se,hilo_avg_bet,"
-            "hilo_i18_ev_per_bet,hilo_i18_ev_per_bet_se,hilo_i18_avg_bet";
+    for (const char *who : {"agent", "hilo", "hilo_i18"}) {
+      file << "," << who << "_ev_per_bet," << who << "_ev_per_bet_se," << who
+           << "_avg_bet," << who << "_won_per_round," << who << "_won_sd";
+    }
   }
   file << "\n";
   file << std::fixed << std::setprecision(6);
@@ -193,7 +206,8 @@ void writeResultsCsv(const std::string &path,
          << "," << r.statesLearned;
     if (betting) {
       for (const EvaluationResult *e : {&r.cmp.agent, &r.hiLo, &r.hiLoIndex}) {
-        file << "," << e->evPerUnitBet << "," << e->evPerUnitStdErr << "," << e->avgBet;
+        file << "," << e->evPerUnitBet << "," << e->evPerUnitStdErr << "," << e->avgBet
+             << "," << e->wonPerRound << "," << e->wonStdDev;
       }
     }
     file << "\n";
@@ -269,20 +283,20 @@ void printResultsTable(const std::vector<SeedResult> &results,
   }
 
   if (!results.empty() && results.front().betting) {
-    out << "\nBetting: EV per unit wagered (95% CI), average bet in units\n";
-    out << std::right << std::setw(6) << "seed" << std::setw(24) << "agent"
-        << std::setw(7) << "bet" << std::setw(24) << "Hi-Lo" << std::setw(7) << "bet"
-        << std::setw(24) << "Hi-Lo + I18" << "\n";
-    out << std::string(92, '-') << "\n";
-    for (const auto &r : results) {
-      out << std::fixed << std::setw(6) << r.seed;
-      const EvaluationResult *cols[] = {&r.cmp.agent, &r.hiLo, &r.hiLoIndex};
-      for (int c = 0; c < 3; ++c) {
-        out << std::setprecision(4) << std::setw(14) << cols[c]->evPerUnitBet << " +/- "
-            << std::setw(5) << (1.96 * cols[c]->evPerUnitStdErr);
-        if (c < 2) out << std::setprecision(2) << std::setw(7) << cols[c]->avgBet;
+    out << "\nBetting: EV per unit wagered (95% CI) | avg bet | units won per 100 rounds"
+           " | desirability index\n";
+    const char *names[] = {"agent", "Hi-Lo", "Hi-Lo + I18"};
+    for (int c = 0; c < 3; ++c) {
+      out << "  " << names[c] << "\n";
+      for (const auto &r : results) {
+        const EvaluationResult *e =
+            c == 0 ? &r.cmp.agent : c == 1 ? &r.hiLo : &r.hiLoIndex;
+        out << std::fixed << std::setw(8) << r.seed << std::setprecision(4)
+            << std::setw(12) << e->evPerUnitBet << " +/- " << std::setw(6)
+            << (1.96 * e->evPerUnitStdErr) << std::setprecision(2) << std::setw(8)
+            << e->avgBet << std::setw(9) << (100.0 * e->wonPerRound) << std::setw(8)
+            << e->desirabilityIndex() << "\n";
       }
-      out << "\n";
     }
   }
 

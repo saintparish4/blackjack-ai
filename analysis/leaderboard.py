@@ -26,6 +26,8 @@ def fmt(row: dict, metric: str, scale: float = 1.0, digits: int = 4) -> str:
         return "n/a"
     m = float(row[metric]["mean"]) * scale
     ci = float(row[metric]["ci95"]) * scale
+    if metric.endswith("avg_bet"):
+        return f"{m:.{digits}f} ± {ci:.{digits}f}"
     return f"{m:+.{digits}f} ± {ci:.{digits}f}" if scale == 1.0 else f"{m:.{digits}f} ± {ci:.{digits}f}"
 
 
@@ -41,12 +43,25 @@ def main() -> int:
         return 1
     arms.sort(key=lambda r: float(r["agent_ev"]["mean"]), reverse=True)
 
-    header = ["Arm", "Seeds", "Agent EV / round", "Book EV / round",
-              "Gap recovered %", "Two-card %", "Pairs %", "Overall %"]
-    rows = [[a["arm"], str(a["seeds"]), fmt(a, "agent_ev"), fmt(a, "book_ev"),
-             fmt(a, "gap_recovered", 100, 1), fmt(a, "two_card_accuracy", 100, 1),
-             fmt(a, "pair_accuracy", 100, 1), fmt(a, "accuracy", 100, 1)]
-            for a in arms]
+    betting = all("agent_ev_per_bet" in a for a in arms)
+    if betting:
+        # Card-counting runs: rank by edge per unit wagered, the number that
+        # includes bet sizing, next to the textbook counters on the same shoes.
+        arms.sort(key=lambda r: float(r["agent_ev_per_bet"]["mean"]), reverse=True)
+        header = ["Arm", "Seeds", "Agent EV / unit bet", "Agent avg bet",
+                  "Hi-Lo EV / unit bet", "Hi-Lo + I18 EV / unit bet",
+                  "Flat basic strategy EV"]
+        rows = [[a["arm"], str(a["seeds"]), fmt(a, "agent_ev_per_bet"),
+                 fmt(a, "agent_avg_bet", 1.0, 2), fmt(a, "hilo_ev_per_bet"),
+                 fmt(a, "hilo_i18_ev_per_bet"), fmt(a, "book_ev")]
+                for a in arms]
+    else:
+        header = ["Arm", "Seeds", "Agent EV / round", "Book EV / round",
+                  "Gap recovered %", "Two-card %", "Pairs %", "Overall %"]
+        rows = [[a["arm"], str(a["seeds"]), fmt(a, "agent_ev"), fmt(a, "book_ev"),
+                 fmt(a, "gap_recovered", 100, 1), fmt(a, "two_card_accuracy", 100, 1),
+                 fmt(a, "pair_accuracy", 100, 1), fmt(a, "accuracy", 100, 1)]
+                for a in arms]
 
     if args.markdown:
         print("| " + " | ".join(header) + " |")

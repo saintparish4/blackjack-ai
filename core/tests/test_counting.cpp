@@ -235,6 +235,20 @@ TEST(CountingTest, BetSizeScalesWinningsNotEdge) {
   EXPECT_NEAR(r.wonPerRound, 8.0 * r.avgReward, 1e-9);
 }
 
+// Betting the same amount on every round scales the winnings and their spread
+// together; a risk-adjusted score must not reward that.
+TEST(CountingTest, DesirabilityIndexIgnoresUnitSize) {
+  GameRules rules = GameRules::vegasStrip();
+  rules.maxBetUnits = 8;
+  BasicStrategyAgent flat(rules);
+  MaxBettor big(rules);
+  EvaluationResult a = Evaluator(rules, 21u).evaluate(&flat, 30'000, false);
+  EvaluationResult b = Evaluator(rules, 21u).evaluate(&big, 30'000, false);
+  EXPECT_NEAR(b.wonStdDev, 8.0 * a.wonStdDev, 1e-9);
+  EXPECT_NEAR(a.desirabilityIndex(), b.desirabilityIndex(), 1e-9);
+  EXPECT_NEAR(a.wonStdDev, a.rewardStdErr * std::sqrt(30'000.0), 1e-9);
+}
+
 TEST(CountingTest, CountProfileCoversEveryRound) {
   GameRules rules = GameRules::vegasStrip();
   BasicStrategyAgent book(rules);
@@ -268,6 +282,21 @@ TEST(CountingTest, LearnedBetsFollowTheSignOfTheMeasuredEdge) {
   EXPECT_EQ(agent.chooseBet(hot), 8);
   EXPECT_EQ(agent.chooseBet(cold), 1);
   EXPECT_EQ(agent.chooseBet(rare), 1);
+
+  // Proportional sizing: one unit per quarter point of edge, capped.
+  TabularAgent::Hyperparameters kelly = p;
+  kelly.betProportional = true;
+  QLearningAgent sizer(kelly, 1u);
+  BetContext mild = hot;
+  mild.countBucket = 6;
+  for (uint64_t i = 0; i < TabularAgent::MIN_BET_SAMPLES; ++i) {
+    sizer.learnBet(mild, (i % 2) ? 1.0 : -0.99); // mean +0.005 -> 2 units
+    sizer.learnBet(hot, (i % 2) ? 1.2 : -1.0);   // mean +0.1 -> capped at 8
+    sizer.learnBet(cold, (i % 2) ? 1.0 : -1.1);
+  }
+  EXPECT_EQ(sizer.chooseBet(mild), 2);
+  EXPECT_EQ(sizer.chooseBet(hot), 8);
+  EXPECT_EQ(sizer.chooseBet(cold), 1);
 
   // The bet table survives a save/load round trip, as does the flag.
   auto dir = scratch("bets");

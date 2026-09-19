@@ -458,6 +458,8 @@ EvaluationResult Evaluator::evaluate(ai::Agent *agent, size_t numGames,
     const double ratio = sumWon / sumBet;
     result.evPerUnitBet = ratio;
     if (numGames > 1) {
+      const double wonVar = (sumWonSq - n * result.wonPerRound * result.wonPerRound) / (n - 1.0);
+      result.wonStdDev = wonVar > 0.0 ? std::sqrt(wonVar) : 0.0;
       // Var of W - R*B around zero, divided by mean bet squared.
       const double resid =
           (sumWonSq - 2.0 * ratio * sumWonBet + ratio * ratio * sumBetSq) / (n - 1.0);

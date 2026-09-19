@@ -48,6 +48,15 @@ struct EvaluationResult {
   double evPerUnitBet = 0.0;
   double evPerUnitStdErr = 0.0; ///< Delta-method standard error of the ratio
   double wonPerRound = 0.0;     ///< Units won per round (bet x reward)
+  /// Standard deviation of units won per round. Bigger bets raise it along
+  /// with wonPerRound; desirabilityIndex() weighs one against the other.
+  double wonStdDev = 0.0;
+
+  /** Schlesinger's desirability index, 1000 x mean / SD of units won per
+   *  round: a risk-adjusted score that doesn't care how big the unit is. */
+  double desirabilityIndex() const {
+    return wonStdDev > 0.0 ? 1000.0 * wonPerRound / wonStdDev : 0.0;
+  }
 
   /// Rounds and summed per-unit reward by the true-count bucket the round was
   /// dealt at: the policy's edge as a function of the count.

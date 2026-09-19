@@ -663,7 +663,9 @@ void Trainer::runAndSaveReport(const TrainingMetrics &finalMetrics) {
         << " units, EV per unit wagered) ---\n";
     oss << std::setw(24) << "Agent" << ": " << std::setprecision(4)
         << agentResult.evPerUnitBet << " +/- " << (1.96 * agentResult.evPerUnitStdErr)
-        << " (avg bet " << std::setprecision(2) << agentResult.avgBet << ")\n";
+        << " (avg bet " << std::setprecision(2) << agentResult.avgBet << ", "
+        << (100.0 * agentResult.wonPerRound) << " units per 100 rounds, DI "
+        << agentResult.desirabilityIndex() << ")\n";
     oss << std::setw(24) << "Basic strategy (flat)" << ": " << std::setprecision(4)
         << bookResult.evPerUnitBet << " +/- " << (1.96 * bookResult.evPerUnitStdErr) << "\n";
     oss << std::setprecision(4);

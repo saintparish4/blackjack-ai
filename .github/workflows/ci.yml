@@ -81,6 +81,20 @@ jobs:
           diff /tmp/exp-a/smoke/results.csv /tmp/exp-b/smoke/results.csv
           diff /tmp/exp-a.txt /tmp/exp-b.txt
 
+      # The card-counting path: a counting, bet-learning agent against both
+      # Hi-Lo baselines with a 1-8 spread, also required to be deterministic.
+      - name: Smoke test card counting
+        working-directory: core
+        run: |
+          # extends resolves relative to the config file, which lives in /tmp.
+          printf 'extends = %s/../config/default.cfg\nmax_bet = 8\nuse_count = true\nlearn_bets = true\nbet_calibration_rounds = 20000\n' "$PWD" > /tmp/count.cfg
+          for run in a b; do
+            ../build/experiment --config /tmp/count.cfg --seeds 2 --episodes 20000 \
+              --eval-rounds 20000 --out /tmp/count-$run --name smoke > /dev/null
+          done
+          diff /tmp/count-a/smoke/results.csv /tmp/count-b/smoke/results.csv
+          diff /tmp/count-a/smoke/count_profile.csv /tmp/count-b/smoke/count_profile.csv
+
   sanitizers:
     name: asan+ubsan / ubuntu
     runs-on: ubuntu-latest

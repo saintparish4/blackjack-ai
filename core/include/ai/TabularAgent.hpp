@@ -50,13 +50,20 @@ public:
     bool useCount = false;
     /// Size bets from the agent's own measured edge at each count.
     bool learnBets = false;
+    /// false: the maximum wherever the edge is positive (risk-neutral: most
+    /// units won per round). true: one unit per betUnitEdge of edge, the way
+    /// a Kelly bettor scales with edge.
+    bool betProportional = false;
+    /// Edge per unit bet for proportional sizing. 0.25% matches the textbook
+    /// Hi-Lo ramp, which bets roughly one unit per quarter point of edge.
+    double betUnitEdge = 0.0025;
 
     bool isValid() const {
       return learningRate > 0 && learningRate <= 1 && discountFactor >= 0 &&
              discountFactor <= 1 && epsilon >= 0 && epsilon <= 1 &&
              epsilonDecay > 0 && epsilonDecay <= 1 && epsilonMin >= 0 &&
              epsilonMin <= epsilon && alphaOmega > 0 && alphaOmega <= 1 &&
-             alphaMin >= 0 && alphaMin <= 1;
+             alphaMin >= 0 && alphaMin <= 1 && betUnitEdge > 0;
     }
   };
 
@@ -85,7 +92,8 @@ public:
   /** Max bet where the calibrated edge at this count is positive, min bet
    *  everywhere else (or always, if bet learning is off). For a player who
    *  only cares about expected value, a bet that's linear in its payoff is
-   *  worth making as large as possible exactly when the edge is positive. */
+   *  worth making as large as possible exactly when the edge is positive.
+   *  With betProportional, edge / betUnitEdge units instead. */
   int chooseBet(const BetContext &ctx, bool training = false) override;
   void learnBet(const BetContext &ctx, double perUnitReward) override;
 
