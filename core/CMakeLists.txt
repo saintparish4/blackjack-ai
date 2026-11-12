@@ -193,6 +193,10 @@ target_link_libraries(benchmark blackjack_training)
 add_executable(play scripts/play.cpp)
 target_link_libraries(play blackjack_training)
 
+# === Solver Executable (exact EVs, Farmer-comparable output) ===
+add_executable(solve scripts/solve.cpp)
+target_link_libraries(solve blackjack_training)
+
 # === Experiment Executable (one config over N seeds) ===
 add_executable(experiment scripts/experiment.cpp)
 target_link_libraries(experiment blackjack_training)
@@ -223,4 +227,5 @@ message(STATUS "  - run_tests (executable)")
 message(STATUS "  - benchmark (executable)")
 message(STATUS "  - play (executable)")
 message(STATUS "  - experiment (executable)")
+message(STATUS "  - solve (executable)")
 message(STATUS "=================================")
