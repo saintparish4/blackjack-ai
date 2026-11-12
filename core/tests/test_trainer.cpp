@@ -18,13 +18,18 @@ protected:
     params.epsilonMin = 0.01;
     agent = std::make_shared<QLearningAgent>(params);
 
+    // One directory per test: ctest --parallel runs these as separate
+    // processes, and a shared directory let one test's TearDown delete
+    // another's checkpoints mid-run.
+    const std::string test =
+        ::testing::UnitTest::GetInstance()->current_test_info()->name();
     auto tmpDir = std::filesystem::temp_directory_path();
     config.numEpisodes = 100;
     config.evalFrequency = 50;
     config.evalGames = 20;
     config.checkpointFrequency = 100;
-    config.checkpointDir = (tmpDir / "trainer_test_checkpoints").string();
-    config.logDir = (tmpDir / "trainer_test_logs").string();
+    config.checkpointDir = (tmpDir / ("trainer_test_checkpoints_" + test)).string();
+    config.logDir = (tmpDir / ("trainer_test_logs_" + test)).string();
     config.verbose = false;
     config.earlyStoppingPatience = 1000; // effectively disabled
   }
