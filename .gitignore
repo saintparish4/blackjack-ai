@@ -8,6 +8,10 @@ Debug/
 x64/
 x86/
 
+# Farmer's CA (GPL-3.0), fetched and built on demand by tools/farmer/run_farmer.sh
+tools/farmer/src/
+tools/farmer/bin/
+
 # CMake generated files
 CMakeCache.txt
 CMakeFiles/
