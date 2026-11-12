@@ -126,3 +126,29 @@ jobs:
           ASAN_OPTIONS: detect_leaks=1:abort_on_error=1
           UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
         run: ../build/train --episodes 5000
+
+  # The solver is only as trustworthy as its agreement with code nobody on
+  # this project wrote. Farmer's CA (GPL-3.0) is fetched here at a pinned
+  # commit, never vendored, and diffed against ./build/solve block by block.
+  external-references:
+    name: solver vs Farmer's CA
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -B core/build -S core -DCMAKE_BUILD_TYPE=Release -DBLACKJACK_WERROR=ON
+
+      - name: Build solve
+        run: cmake --build core/build --parallel --target solve
+
+      - name: Fetch and build Farmer's CA
+        run: bash tools/farmer/run_farmer.sh --build-only
+
+      - name: Diff strategy, EVs and dealer tables on five rule sets
+        working-directory: core
+        run: |
+          for rules in "6 n n n" "6 y y n" "1 y n n" "2 y n y" "8 n n y"; do
+            echo "== $rules"
+            bash ../tools/farmer/compare_solver.sh $rules
+          done
