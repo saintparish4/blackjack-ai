@@ -99,6 +99,17 @@ add_library(blackjack_ai STATIC ${AI_SOURCES})
 target_include_directories(blackjack_ai PUBLIC include)
 target_link_libraries(blackjack_ai PUBLIC blackjack_game)
 
+# === Exact solver (depends on AI for Action and State) ===
+set(SOLVER_SOURCES
+    include/solver/Dealer.cpp
+    include/solver/InfiniteDeck.cpp
+    include/solver/Solver.cpp
+)
+
+add_library(blackjack_solver STATIC ${SOLVER_SOURCES})
+target_include_directories(blackjack_solver PUBLIC include)
+target_link_libraries(blackjack_solver PUBLIC blackjack_ai)
+
 # === Training (depends on AI) ===
 set(TRAINING_SOURCES
     include/training/ConvergenceReport.cpp
@@ -131,7 +142,7 @@ endif()
 
 add_library(blackjack_training STATIC ${TRAINING_SOURCES})
 target_include_directories(blackjack_training PUBLIC include)
-target_link_libraries(blackjack_training PUBLIC blackjack_ai Threads::Threads)
+target_link_libraries(blackjack_training PUBLIC blackjack_ai blackjack_solver Threads::Threads)
 
 # Google Test
 include(FetchContent)
@@ -155,6 +166,7 @@ set(TEST_SOURCES
     tests/test_lab_bench.cpp
     tests/test_agents.cpp
     tests/test_counting.cpp
+    tests/test_solver.cpp
 )
 
 add_executable(run_tests ${TEST_SOURCES})
