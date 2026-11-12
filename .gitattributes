@@ -12,6 +12,7 @@
 *.cfg   text
 *.txt   text
 *.json  text
+*.sh    text eol=lf
 
 # Binary assets — never normalize, never diff as text
 *.png     binary
