@@ -141,3 +141,9 @@ __pycache__/
 htmlcov/
 .ipynb_checkpoints/
 *.ipynb_checkpoints
+
+# The repo-root convenience Makefile is source, not CMake output.
+!/Makefile
+
+# Its debug, native and asan targets build in core/build-*/.
+core/build-*/
