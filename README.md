@@ -213,7 +213,7 @@ same shoes (Vegas Strip, 75% penetration):
 | **Interactive play** | `./play --mode human|ai|advisor` — play yourself, watch the AI, or get move-by-move advice; `--seed` replays a session |
 | **Beginner mode** | Plain-English card explanations, chip balance, AI reasoning in natural language |
 | **INI config file** | All hyperparameters in `config/default.cfg` and `config/tuned.cfg`; CLI flags override config |
-| **Rule presets** | Vegas Strip, Downtown, Atlantic City, European, Single Deck; per-field overrides including blackjack payout (3:2 or 6:5) and penetration |
+| **Rule presets** | Vegas Strip, Downtown, Atlantic City, Single Deck; per-field overrides including blackjack payout (3:2 or 6:5) and penetration |
 | **Python analysis** | `analysis/plot_training.py` generates 5 plots from training logs; `analysis/publish_results.sh` regenerates every published artifact from one seeded run |
 | **Build hygiene** | `-Werror`, `-march=native` and sanitizers are opt-in CMake options, so a clone builds portably by default |
 | **Training report** | Full text report saved to `analysis/training_report.txt` after each run |
@@ -478,7 +478,6 @@ when it is actually passed — a flag's own default never silently outranks the 
 | `vegas-strip` | 6 | Stands | No |
 | `downtown` | 2 | Hits | Yes |
 | `atlantic-city` | 8 | Stands | Yes |
-| `european` | 6 | Stands | No |
 | `single-deck` | 1 | Hits | No |
 
 ---

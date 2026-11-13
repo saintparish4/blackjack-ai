@@ -4,14 +4,29 @@
 
 namespace blackjack {
 
-/** House rules and table config. */
+/**
+ * House rules and table config: only what BlackjackGame actually reads.
+ *
+ * Some rules are not configurable because the engine plays exactly one
+ * version of them, and a field that claims otherwise is worse than no field.
+ * This struct used to carry doubleAfterSplit, resplitAces and maxSplits; every
+ * preset set them and nothing ever read them. The fixed rules are:
+ *
+ *  - The dealer peeks: a dealer natural ends the round before the player acts.
+ *  - One split per round, no resplits. Split aces take one card each; a 21
+ *    after a split is not a natural.
+ *  - Only identical ranks split (K,K yes; K,Q no).
+ *  - No double after a split. Doubling is allowed on any first two cards.
+ *  - Surrender, when offered, is late (after the peek).
+ *
+ * solver::Rules::fromGame() maps these onto the exact solver, and
+ * training/EngineAudit.hpp checks that the engine plays the rules it says
+ * it plays.
+ */
 struct GameRules {
     size_t numDecks = 6;
     bool dealerHitsSoft17 = true;
     double blackjackPayout = 1.5;  // 3:2 = 1.5, 6:5 = 1.2
-    bool doubleAfterSplit = true;
-    bool resplitAces = false;
-    int maxSplits = 3;
     bool surrender = false;
     double penetration = 0.75;  // fraction of shoe dealt before reshuffle
     /// Largest bet the player may place, in units of the minimum bet. 1 means
@@ -26,13 +41,14 @@ struct GameRules {
         return bet * 2;
     }
 
-    /** Rule presets (common house rules). */
+    /** Rule presets (common house rules). Each one differs from the others in
+     *  at least one rule the engine reads; a preset that duplicates another
+     *  only pretends to offer a choice. */
     static GameRules vegasStrip() {
         GameRules r;
         r.numDecks = 6;
         r.dealerHitsSoft17 = false;
         r.blackjackPayout = 1.5;
-        r.doubleAfterSplit = true;
         r.surrender = false;
         return r;
     }
@@ -41,7 +57,6 @@ struct GameRules {
         r.numDecks = 2;
         r.dealerHitsSoft17 = true;
         r.blackjackPayout = 1.5;
-        r.doubleAfterSplit = true;
         r.surrender = true;
         return r;
     }
@@ -50,16 +65,7 @@ struct GameRules {
         r.numDecks = 8;
         r.dealerHitsSoft17 = false;
         r.blackjackPayout = 1.5;
-        r.doubleAfterSplit = true;
         r.surrender = true;
-        return r;
-    }
-    static GameRules european() {
-        GameRules r;
-        r.numDecks = 6;
-        r.dealerHitsSoft17 = false;
-        r.blackjackPayout = 1.5;
-        r.surrender = false;
         return r;
     }
     static GameRules singleDeck() {

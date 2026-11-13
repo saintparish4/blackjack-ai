@@ -14,11 +14,10 @@ GameRules rulesFromPreset(const std::string &preset) {
   if (preset == "vegas-strip")   return GameRules::vegasStrip();
   if (preset == "downtown")      return GameRules::downtown();
   if (preset == "atlantic-city") return GameRules::atlanticCity();
-  if (preset == "european")      return GameRules::european();
   if (preset == "single-deck")   return GameRules::singleDeck();
   throw std::invalid_argument(
       "unknown rules preset '" + preset +
-      "' (expected vegas-strip, downtown, atlantic-city, european, single-deck)");
+      "' (expected vegas-strip, downtown, atlantic-city, single-deck)");
 }
 
 namespace {
