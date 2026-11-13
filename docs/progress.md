@@ -6,7 +6,7 @@ through the same `Evaluator`, game engine and rules as the in-engine baselines.
 
 ## Scoreboard
 
-_Last updated 2026-09-19, after step 4 (card counting). All four next steps have landed._
+_Last updated 2026-11-12, after steps 5–7 (ground truth, exact regret, index plays)._
 
 | Area | Metric | Value | Reproduce with (from `core/`) |
 |------|--------|-------|-------------------------------|
@@ -16,22 +16,27 @@ _Last updated 2026-09-19, after step 4 (card counting). All four next steps have
 | | EV gap recovered | **99.0%** | same run |
 | **Confirmed** | Agent vs book, 10 fresh seeds × 1M rounds | −0.0071 ± 0.0008 vs −0.0054 ± 0.0006 | `experiments/001-double-down/run.sh confirm` |
 | | Shortfall to basic strategy | **0.00112 ± 0.00029 per round, exact** (was 0.0248; 001's Monte Carlo said 0.0017) | `experiments/004-regret/` |
+| | Of which learning error / representation ceiling | 99% / 0.0015% per round (CD optimal − best total-dependent policy) | same |
 | **Spread** | EV gap recovered, seeds 1–5 | 99.7% ± 1.0 (range 98.8–100.6) | `./build/experiment --config ../config/tuned.cfg --seeds 5` |
 | | Agent EV, seeds 1–5 | −0.0076 ± 0.0024 (range −0.0098 to −0.0049) | same |
 | **Policy** | Accuracy: overall / two-card / multi-card / pairs | 94.9% / 92.9% / 97.8% / 92.0% | seed 1 |
 | | Book doubles (hard 9–11) the agent makes | 18 of 21 (was 3) | seed 1 strategy chart |
-| **Engine** | Basic strategy EV, 20M rounds | −0.0061 ± 0.0004 (published house edge for these rules: ≈ −0.005 to −0.006) | `./build/experiment --config ../config/tuned.cfg --seeds 4 --episodes 1000 --eval-rounds 5000000` |
-| **Engineering** | Unit tests | 166 passing, 10 suites | `./build/run_tests` |
+| **Exact** | Solver vs Farmer's CA and Wizard of Odds, 5 rule sets | identical on every printed digit; CI diffs it on every push | `../tools/farmer/compare_solver.sh 6 n n n` |
+| | Book chart EV, exact, off the top (6D S17 NDAS) | −0.581853% per round, 0.0031% behind CD optimal | `./build/audit` (exact column) |
+| **Engine** | Engine vs solver, 104 quantities, 4 presets × 20M rounds per pass | all within 2.6 SE (max \|z\| 2.59) | `./build/audit --rounds 20000000 --cut-card-rounds 20000000` |
+| | Basic strategy EV, 20M rounds, cut card at 75% | −0.0061 ± 0.0004 (exact off the top: −0.0058) | `./build/experiment --config ../config/tuned.cfg --seeds 4 --episodes 1000 --eval-rounds 5000000` |
+| **Engineering** | Unit tests | 207 passing, 20 suites | `./build/run_tests` |
 | | Training throughput | 1.1M episodes/s in the published run (machine shared with other jobs; 2.0–2.7M/s measured idle) | training report |
 | | Game simulation | 5.6–6.1M rounds/s (step 1 measurement) | `./build/benchmark` |
 | | Greedy decision latency | 3.9–4.5 ns (step 1 measurement) | `./build/benchmark` |
-| **Lab** | Experiments recorded | 3 ([`000`](../experiments/000-tuned-baseline/), [`001`](../experiments/001-double-down/), [`002`](../experiments/002-card-counting/)) | [`experiments/`](../experiments/) |
-| | Arms run | 001: 18 explored, 7 confirmed · 002: 10 explored, 4 confirmed | experiment folders |
+| **Lab** | Experiments recorded | 6 ([`000`](../experiments/000-tuned-baseline/), [`001`](../experiments/001-double-down/), [`002`](../experiments/002-card-counting/), [`003`](../experiments/003-ground-truth/), [`004`](../experiments/004-regret/), [`005`](../experiments/005-index-plays/)) | [`experiments/`](../experiments/) |
+| | Arms run | 001: 18 explored, 7 confirmed · 002: 10 explored, 4 confirmed · 005: 8 explored, 4 confirmed | experiment folders |
 | **Counting** | Basic strategy + learned bets, edge per unit wagered | **+0.27% ± 0.05** (10 fresh seeds; flat basic strategy −0.58%) | `experiments/002-card-counting/run.sh confirm` |
 | | Textbook Hi-Lo ramp / Hi-Lo + Illustrious 18 (same shoes) | +0.11% ± 0.04 / +0.22% ± 0.03 | same |
 | | Units won per 100 rounds: learned bets vs Hi-Lo + I18 | +0.74 ± 0.14 vs +0.32 ± 0.04 | same |
 | | Desirability index: learned bets vs Hi-Lo + I18 vs Hi-Lo ramp | 1.62 vs 1.41 vs 0.71 | same |
-| | Learned counter (count in the playing state, 50M episodes) | −0.10% ± 0.13, a negative result | same |
+| | Learned counter (count in the playing state, 50M episodes) | −0.10% ± 0.13, a negative result, closed by 005 | same |
+| | Index plays rediscovered within ±1 TC, Q linear in the count, 3×10⁸ episodes | **16.2 ± 0.7 of 17** (10 fresh seeds; count-blind floor 2; 002's per-bucket table: 12.3) | `experiments/005-index-plays/run.sh confirm` (repo root) |
 | | Agent's measured edge per true count | about +0.5% per count, zero near TC +1 | `count_profile.csv` |
 | **Product** | Browser demo | built and tested; goes live at https://saintparish4.github.io/blackjack-ai/ once pushed with Pages enabled | `web/build.sh`, then `python3 -m http.server -d web` |
 | | Demo payload | 261 KB wasm + 102 KB JS + 43 KB model | `web/build.sh` |
@@ -43,12 +48,63 @@ _Last updated 2026-09-19, after step 4 (card counting). All four next steps have
 ## Roadmap status
 
 - [x] **Step 1: lab bench.** Seeds, experiment runner, early stopping on accuracy or EV, payout fix.
-- [x] **Step 2: teach it to double.** Visit-scaled α wins; the shortfall to the book is 0.0017/round.
+- [x] **Step 2: teach it to double.** Visit-scaled α wins; the shortfall to the book is 0.0011/round,
+  exactly (001's Monte Carlo said 0.0017).
 - [x] **Step 3: browser demo.** WebAssembly build with Play, Coach and Watch modes, deployed by CI.
 - [x] **Step 4: card counting.** Learned bet sizing beats textbook Hi-Lo's ramp; count-aware play
-  didn't learn (a negative result, written up).
+  didn't learn (a negative result, written up, and closed by step 7).
+- [x] **Step 5: ground truth.** An exact solver that matches Farmer's CA and Wizard of Odds, and the
+  engine audited against it.
+- [x] **Step 6: exact regret.** The agent's shortfall priced state by state.
+- [x] **Step 7: index plays.** A learner linear in the true count rediscovers 16.2 of the
+  Illustrious 18's 17 plays.
 
 ## Milestones
+
+### Steps 5–7: ground truth, exact regret, index plays (2026-11-12)
+
+**What landed**
+
+- **Exact solver (`solver/`, `solve`):** the exact EV of any policy off any shoe, by combinatorial
+  analysis. It agrees with Eric Farmer's CA on every digit Farmer prints and with Wizard of Odds'
+  house-edge table, on five rule sets. `tools/farmer/` fetches and builds Farmer's GPL code without
+  vendoring it, and a CI job diffs the two on every push.
+- **Rules that say only what the engine plays:** `GameRules` lost `doubleAfterSplit`, `maxSplits`,
+  `resplitAces` (set by every preset, read by nothing) and the `european` preset (a copy of
+  `vegas-strip`). A test fails if two presets are ever identical again.
+- **Engine audit (`EngineAudit`, `audit`):** every tallied quantity against its exact value, as a
+  z-score: dealer bust rate by upcard, naturals, and EV split by the opening play.
+- **Exact regret (`PolicyAnalysis`, `regret`):** the agent's shortfall itemised by its own `State`
+  via the performance-difference identity, against the best policy that `State` can express.
+  `tools/farmer/policy_ev` has Farmer's code grade the same exported policies independently.
+- **Index plays (`CountAnalysis`, `CountingAgent`, `IndexDiscovery`, `indices`):** exact effects of
+  removal and linear index estimates, eight learner variants on one agent, and a score for
+  rediscovering the Illustrious 18. Experiment 005 was pre-registered in git before confirmation.
+
+**Metrics at this milestone**
+
+| Metric | Value |
+|---|---|
+| Solver vs Farmer's CA, 5 rule sets | identical to the last printed digit |
+| Engine audit, 104 quantities | max \|z\| 2.59 |
+| Book chart, exact, off the top | −0.581853% per round |
+| Agent's exact shortfall to the book (001's ten agents) | 0.00112 ± 0.00029 per round; 99% learning error |
+| Representation ceiling (CD optimal − best total-dependent) | 0.0015% per round |
+| Farmer's code grading the ten learned policies | same EV to nine decimals, all ten |
+| Hi-Lo betting correlation, from exact EoRs | 0.967 (published 0.97) |
+| Index plays rediscovered, linear learner, fresh seeds | 16.2 ± 0.7 of 17 (count-blind floor 2) |
+| Tests (C++) | 207 |
+
+**Honest limits:**
+
+- The engine plays one rule family: one split, no double after split, no resplits, a dealer peek.
+  The solver models DAS only to compare with Farmer.
+- The best total-dependent policy is a local optimum of policy iteration, so the 0.0015% ceiling is
+  a lower bound.
+- The cut-card effect at 6 and 8 decks is below what 20M rounds resolve.
+- The pre-registered theory picked the wrong winner for index plays: exploring starts failed.
+- What the rediscovered index plays are worth at flat bets, and how the learned bet ramp compares
+  with Kelly, isn't measured.
 
 ### Step 4: card counting (2026-09-19)
 
