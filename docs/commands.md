@@ -43,6 +43,20 @@ Stay in `core/` for build and run. Executables live in `./build/`.
 - ./build/experiment --config ../config/default.cfg --seeds 3 --episodes 200000 --out ../experiments --name my-sweep
 - ./build/experiment --config ../config/tuned.cfg --seeds 10 --seed-base 100 --threads 4
 
+### Exact solver and grading
+- ./build/solve --help
+- ./build/solve     [ optimal strategy, EV by upcard and dealer table: 6D S17, the engine's rules ]
+- ./build/solve --decks 1 --h17
+- ./build/solve --policy book     [ the repo's basic strategy chart, exactly ]
+- ./build/audit --help
+- ./build/audit --preset downtown --rounds 1000000
+- ./build/audit --rounds 20000000 --cut-card-rounds 20000000     [ experiment 003's full run ]
+- ./build/regret --models ../web/model/agent --top 10     [ exact EV lost, itemised by state ]
+- ./build/regret --models ../web/model/agent --export-farmer /tmp/published
+- ../tools/farmer/bin/policy_ev 6 n n n /tmp/published-0.policy     [ Farmer's code, same EV ]
+- ./build/indices --config ../experiments/005-index-plays/arms/linear.cfg --theory
+- ./build/indices --config ../experiments/005-index-plays/arms/linear.cfg --seeds 2 --checkpoints 1e6,1e7
+
 ### Benchmark
 - ./build/benchmark --help
 - ./build/benchmark
@@ -95,6 +109,14 @@ Python commands assume you are in `analysis/` (or the directory containing `requ
 - experiments/002-card-counting/run.sh confirm     [ pre-registered arms on fresh seeds 101-110 ]
 - python analysis/leaderboard.py experiments/002-card-counting/confirm
 - python analysis/plot_counting.py experiments/002-card-counting/confirm/<arm> -o docs/images/counting_edge.png
+
+## Exact results (from the repo root)
+- make compare-solver     [ the solver against Farmer's CA, all five CI rule sets; fetches it once ]
+- make compare-solver RULES="6 y y n"
+- make audit ARGS="--rounds 20000000 --cut-card-rounds 20000000"
+- make exp005 ARGS=theory     [ what the effects of removal predict, ~25 s ]
+- make exp005 ARGS=explore    [ every arm, seeds 1-5; ~30 min on 8 cores ]
+- make exp005 ARGS=confirm    [ candidates.txt, seeds 101-110; ~26 min on 8 cores ]
 
 ## Browser demo (from the repo root)
 - web/build.sh                          [ needs Emscripten; writes web/wasm/ ]

@@ -463,7 +463,7 @@ early_stopping_metric   = accuracy   # or: ev
 early_stopping_patience = 10
 eval_rounds          = 200000        # rounds per policy in the final EV comparison
 
-# Agent: q-learning | expected-sarsa | double-q
+# Agent: q-learning | expected-sarsa | double-q | basic-strategy | counting
 agent           = q-learning
 alpha_schedule  = visit      # α = 1/(1+n)^alpha_omega per (state, action); or: constant
 alpha_omega     = 1.0
@@ -485,6 +485,9 @@ rules_preset         = vegas-strip
 # penetration        = 0.75
 # max_bet            = 1             # bet spread in units; above 1 adds Hi-Lo baselines
 ```
+
+`agent = counting` adds experiment 005's options (`count_prior`, `representation`, `exploration`,
+`target` and their parameters), documented in `config/default.cfg`.
 
 A config can start with `extends = <path>` to inherit another file and override only what differs.
 
