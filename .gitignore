@@ -104,6 +104,8 @@ web/wasm/
 # experiments/ are tracked; per-seed models and logs are regenerable.
 core/experiments/
 experiments/**/seed-*/
+# Wall-clock training time from run.sh: machine-specific, unlike every other output.
+experiments/**/time.txt
 
 # Logs
 *.log
