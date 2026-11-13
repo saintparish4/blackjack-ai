@@ -1,0 +1,122 @@
+
+== vegas-strip, 20000000 rounds per pass, seed 1
+quantity                                          exact       engine     +/- se       z
+P(player natural)                              0.047489     0.047549   0.000048    1.25
+P(dealer natural | up A)                       0.308682     0.308560   0.000372   -0.33
+P(dealer natural | up T)                       0.077170     0.077044   0.000108   -1.17
+P(dealer busts | up 2)                         0.353541     0.353850   0.000395    0.78
+P(dealer busts | up 3)                         0.374236     0.374511   0.000400    0.69
+P(dealer busts | up 4)                         0.395850     0.395948   0.000404    0.24
+P(dealer busts | up 5)                         0.418452     0.417613   0.000408   -2.06
+P(dealer busts | up 6)                         0.422810     0.422763   0.000408   -0.12
+P(dealer busts | up 7)                         0.261870     0.261653   0.000363   -0.60
+P(dealer busts | up 8)                         0.243637     0.243110   0.000354   -1.49
+P(dealer busts | up 9)                         0.229194     0.229474   0.000347    0.81
+P(dealer busts | up T)                         0.212427     0.212264   0.000169   -0.96
+P(dealer busts | up A)                         0.115502     0.115460   0.000264   -0.16
+EV per round, book                            -0.005819    -0.005673   0.000253    0.58
+P(player natural)                              0.047489     0.047501   0.000048    0.24
+EV | player natural                            1.431569     1.432080   0.000320    1.60
+P(dealer natural)                              0.045323     0.045298   0.000047   -0.55
+P(opening stand)                               0.392969     0.392943   0.000109   -0.24
+EV | opening stand                             0.117758     0.117938   0.000334    0.54
+P(opening hit)                                 0.397171     0.397210   0.000109    0.36
+EV | opening hit                              -0.273244    -0.273010   0.000326    0.72
+P(opening double)                              0.095294     0.095362   0.000066    1.03
+EV | opening double                            0.339494     0.338681   0.001375   -0.59
+P(opening split)                               0.021754     0.021687   0.000033   -2.05
+EV | opening split                             0.065178     0.064621   0.002561   -0.22
+EV per round, book, cut card at 75%           -0.005819    -0.006082   0.000253   -1.04
+
+== downtown, 20000000 rounds per pass, seed 1
+quantity                                          exact       engine     +/- se       z
+P(player natural)                              0.047797     0.047749   0.000048   -1.01
+P(dealer natural | up A)                       0.310680     0.310550   0.000373   -0.35
+P(dealer natural | up T)                       0.077670     0.077776   0.000108    0.98
+P(dealer busts | up 2)                         0.356654     0.356115   0.000396   -1.36
+P(dealer busts | up 3)                         0.377602     0.377631   0.000400    0.07
+P(dealer busts | up 4)                         0.401479     0.401652   0.000405    0.43
+P(dealer busts | up 5)                         0.423824     0.424286   0.000409    1.13
+P(dealer busts | up 6)                         0.438735     0.438730   0.000410   -0.01
+P(dealer busts | up 7)                         0.260936     0.260793   0.000363   -0.40
+P(dealer busts | up 8)                         0.241460     0.241580   0.000354    0.34
+P(dealer busts | up 9)                         0.230749     0.231075   0.000349    0.94
+P(dealer busts | up T)                         0.213058     0.213219   0.000169    0.95
+P(dealer busts | up A)                         0.139686     0.139736   0.000286    0.17
+EV per round, book                            -0.005042    -0.004959   0.000250    0.33
+P(player natural)                              0.047797     0.047757   0.000048   -0.83
+EV | player natural                            1.436808     1.437050   0.000308    0.79
+P(dealer natural)                              0.045783     0.045854   0.000047    1.52
+P(opening stand)                               0.388108     0.388077   0.000109   -0.28
+EV | opening stand                             0.120085     0.120134   0.000337    0.15
+P(opening hit)                                 0.346778     0.346789   0.000106    0.11
+EV | opening hit                              -0.244358    -0.244100   0.000351    0.73
+P(opening double)                              0.099559     0.099554   0.000067   -0.07
+EV | opening double                            0.347422     0.348379   0.001345    0.71
+P(opening split)                               0.019944     0.019910   0.000031   -1.08
+EV | opening split                             0.081490     0.082481   0.002680    0.37
+P(opening surrender)                           0.052032     0.052058   0.000050    0.53
+EV | opening surrender                        -0.500000    -0.500000   0.000000    0.00
+EV per round, book, cut card at 75%           -0.005042    -0.006072   0.000250   -4.11
+
+== atlantic-city, 20000000 rounds per pass, seed 1
+quantity                                          exact       engine     +/- se       z
+P(player natural)                              0.047451     0.047419   0.000048   -0.69
+P(dealer natural | up A)                       0.308434     0.308527   0.000373    0.25
+P(dealer natural | up T)                       0.077108     0.077061   0.000108   -0.44
+P(dealer busts | up 2)                         0.353558     0.353869   0.000395    0.79
+P(dealer busts | up 3)                         0.374147     0.374339   0.000400    0.48
+P(dealer busts | up 4)                         0.395503     0.396251   0.000404    1.85
+P(dealer busts | up 5)                         0.417937     0.417616   0.000407   -0.79
+P(dealer busts | up 6)                         0.422898     0.423628   0.000408    1.79
+P(dealer busts | up 7)                         0.261982     0.261341   0.000363   -1.77
+P(dealer busts | up 8)                         0.243912     0.244156   0.000355    0.69
+P(dealer busts | up 9)                         0.229001     0.228953   0.000347   -0.14
+P(dealer busts | up T)                         0.212347     0.212448   0.000169    0.59
+P(dealer busts | up A)                         0.115448     0.115830   0.000264    1.45
+EV per round, book                            -0.005332    -0.005032   0.000250    1.20
+P(player natural)                              0.047451     0.047458   0.000048    0.13
+EV | player natural                            1.430923     1.430919   0.000323   -0.01
+P(dealer natural)                              0.045266     0.045180   0.000046   -1.85
+P(opening stand)                               0.392938     0.392810   0.000109   -1.17
+EV | opening stand                             0.117757     0.118493   0.000334    2.20
+P(opening hit)                                 0.352315     0.352373   0.000107    0.54
+EV | opening hit                              -0.242494    -0.242514   0.000348   -0.06
+P(opening double)                              0.095314     0.095343   0.000066    0.43
+EV | opening double                            0.337631     0.336724   0.001376   -0.66
+P(opening split)                               0.021979     0.022064   0.000033    2.59
+EV | opening split                             0.063030     0.064924   0.002539    0.75
+P(opening surrender)                           0.044736     0.044773   0.000046    0.78
+EV | opening surrender                        -0.500000    -0.500000   0.000000    0.00
+EV per round, book, cut card at 75%           -0.005332    -0.005731   0.000250   -1.60
+
+== single-deck, 20000000 rounds per pass, seed 1
+quantity                                          exact       engine     +/- se       z
+P(player natural)                              0.048265     0.048328   0.000048    1.30
+P(dealer natural | up A)                       0.313725     0.313593   0.000374   -0.35
+P(dealer natural | up T)                       0.078431     0.078606   0.000109    1.61
+P(dealer busts | up 2)                         0.356601     0.357117   0.000396    1.30
+P(dealer busts | up 3)                         0.378370     0.378615   0.000401    0.61
+P(dealer busts | up 4)                         0.406113     0.406238   0.000406    0.31
+P(dealer busts | up 5)                         0.430294     0.430989   0.000410    1.70
+P(dealer busts | up 6)                         0.437710     0.437988   0.000410    0.68
+P(dealer busts | up 7)                         0.259413     0.259035   0.000363   -1.04
+P(dealer busts | up 8)                         0.238280     0.238335   0.000353    0.15
+P(dealer busts | up 9)                         0.233124     0.233314   0.000350    0.54
+P(dealer busts | up T)                         0.213996     0.214221   0.000169    1.33
+P(dealer busts | up A)                         0.140495     0.140795   0.000286    1.05
+EV per round, book                            -0.002209    -0.002018   0.000254    0.76
+P(player natural)                              0.048265     0.048279   0.000048    0.29
+EV | player natural                            1.444898     1.444708   0.000288   -0.66
+P(dealer natural)                              0.046492     0.046454   0.000047   -0.82
+P(opening stand)                               0.391664     0.391740   0.000109    0.70
+EV | opening stand                             0.114824     0.114804   0.000336   -0.06
+P(opening hit)                                 0.396997     0.396838   0.000109   -1.45
+EV | opening hit                              -0.274920    -0.275043   0.000326   -0.38
+P(opening double)                              0.099379     0.099470   0.000067    1.36
+EV | opening double                            0.370726     0.371861   0.001342    0.85
+P(opening split)                               0.017202     0.017218   0.000029    0.56
+EV | opening split                             0.108858     0.108730   0.002882   -0.04
+EV per round, book, cut card at 75%           -0.002209    -0.003291   0.000254   -4.26
+
+All off-the-top lines within tolerance.
