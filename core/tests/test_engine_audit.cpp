@@ -55,6 +55,16 @@ TEST(EngineAuditTest, ExactBookEvIsTheSolversValue) {
   FAIL() << "no book EV line";
 }
 
+TEST(EngineAuditTest, ZeroSpreadLineFailsUnlessItMatchesExactly) {
+  // A constant tally has no standard error. Matching the exact value is a
+  // pass; missing it (the engine never plays an opening the solver says
+  // happens) must not hide behind a z of 0.
+  EXPECT_EQ((AuditLine{"same", -0.5, -0.5, 0.0, 100}.z()), 0.0);
+  EXPECT_TRUE(std::isinf(AuditLine{"never seen", 0.02, 0.0, 0.0, 100}.z()));
+  EXPECT_TRUE(std::isinf(AuditLine{"no samples", 0.3, 0.0, 0.0, 0}.z()));
+  EXPECT_GT((AuditLine{"seen, not expected", 0.0, 0.01, 0.0, 100}.z()), 4.5);
+}
+
 TEST(EngineAuditTest, VegasStripEngineMatchesSolver) {
   expectAllLinesAgree(GameRules::vegasStrip(), 300'000);
 }

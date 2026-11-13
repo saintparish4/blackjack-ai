@@ -247,8 +247,10 @@ std::vector<AuditLine> auditEngine(const GameRules &rules, const AuditOptions &o
       if (k == SURRENDER && !rules.surrender) continue;
       const std::string name = kCategoryName[k];
       lines.push_back(line("P(" + name + ")", mass[k], share[k]));
-      // A dealer natural is always exactly -1: nothing to estimate.
-      if (k != DEALER_NATURAL) {
+      // A dealer natural is always exactly -1: nothing to estimate. An opening
+      // these rules and this book never reach (mass 0) has no conditional EV;
+      // its P line above still fails if the engine plays it anyway.
+      if (k != DEALER_NATURAL && mass[k] > 0.0) {
         lines.push_back(line("EV | " + name, value[k] / mass[k], conditional[k]));
       }
     }

@@ -27,6 +27,8 @@
 #include "../ai/Agent.hpp"
 #include "../game/BlackjackGame.hpp"
 #include "../game/GameRules.hpp"
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -42,8 +44,17 @@ struct AuditLine {
   double stdErr = 0.0;  ///< Of the estimate
   uint64_t samples = 0; ///< Rounds the estimate averages over
 
-  /** Standard errors between engine and solver. */
-  double z() const { return stdErr > 0.0 ? (mean - exact) / stdErr : 0.0; }
+  /**
+   * Standard errors between engine and solver. With no spread in the sample
+   * (every round tallied the same value, or none), an estimate equal to the
+   * exact value is z = 0 and any other is infinitely far: an engine that never
+   * plays something the solver says happens must fail, not pass as z = 0.
+   */
+  double z() const {
+    if (stdErr > 0.0) return (mean - exact) / stdErr;
+    if (std::fabs(mean - exact) <= 1e-9 * std::max(1.0, std::fabs(exact))) return 0.0;
+    return mean > exact ? HUGE_VAL : -HUGE_VAL;
+  }
 };
 
 struct AuditOptions {
