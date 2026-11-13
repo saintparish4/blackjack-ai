@@ -1,0 +1,57 @@
+Rules: vegas-strip, exact values off the top of a full shoe
+
+References
+  composition-dependent optimal      -0.578793657%
+  best total-dependent policy (TD*)  -0.580301250%  (1 policy-iteration steps from the book)
+  book chart                         -0.581852995%
+  representation ceiling (CD - TD*)  0.001507593% per round
+  book's own gap (TD* - book)        0.001551745% per round
+
+Where TD* plays differently from the book
+  hard 16 vs T               book hit    TD* stand  worth 0.0015517% per round
+
+Models
+  model                                             exact EV        vs CD       vs TD*      vs book
+  /tmp/004/confirm/seed-101/agent              -0.720368840% 0.1415752% 0.1400676% 0.1385158%
+  /tmp/004/confirm/seed-102/agent              -0.698744585% 0.1199509% 0.1184433% 0.1168916%
+  /tmp/004/confirm/seed-103/agent              -0.700152632% 0.1213590% 0.1198514% 0.1182996%
+  /tmp/004/confirm/seed-104/agent              -0.676598793% 0.0978051% 0.0962975% 0.0947458%
+  /tmp/004/confirm/seed-105/agent              -0.684675040% 0.1058814% 0.1043738% 0.1028220%
+  /tmp/004/confirm/seed-106/agent              -0.659927352% 0.0811337% 0.0796261% 0.0780744%
+  /tmp/004/confirm/seed-107/agent              -0.666511160% 0.0877175% 0.0862099% 0.0846582%
+  /tmp/004/confirm/seed-108/agent              -0.648752787% 0.0699591% 0.0684515% 0.0668998%
+  /tmp/004/confirm/seed-109/agent              -0.794046133% 0.2152525% 0.2137449% 0.2121931%
+  /tmp/004/confirm/seed-110/agent              -0.690079336% 0.1112857% 0.1097781% 0.1082263%
+
+Across 10 models (t-based 95% CI over models; every EV is exact, so the
+interval is training variation alone, with no evaluation noise)
+  exact EV                           -0.693986% +/- 0.029332%  (range -0.794046% .. -0.648753%)
+  shortfall to CD optimal            +0.115192% +/- 0.029332%  (range +0.069959% .. +0.215252%)
+    of which representation ceiling  +0.001508% +/- 0.000000%  (range +0.001508% .. +0.001508%)
+    of which learning error (to TD*) +0.113684% +/- 0.029332%  (range +0.068452% .. +0.213745%)
+  shortfall to the book chart        +0.112133% +/- 0.029332%  (range +0.066900% .. +0.212193%)
+
+Learning error by state, mean over models (largest first)
+  state                          reach   loss/round   share    cum.  TD* plays  models wrong (their play)
+  hard 11 vs T (2 cards)      0.014706   0.0080129%    7.0%    7.0%  double     1 (1 hit)
+  hard 16 vs T (2 cards)      0.018230   0.0053452%    4.7%   11.8%  hit        6 (6 stand)
+  hard 9 vs 4 (2 cards)       0.002719   0.0049856%    4.4%   16.1%  double     3 (3 hit)
+  hard 9 vs 3 (2 cards)       0.002719   0.0048774%    4.3%   20.4%  double     7 (7 hit)
+  hard 10 vs 9 (2 cards)      0.002757   0.0042242%    3.7%   24.1%  double     5 (5 hit)
+  5,5 vs 2                    0.000440   0.0040512%    3.6%   27.7%  double     5 (5 hit)
+  soft 18 vs 4 (2 cards)      0.000919   0.0037809%    3.3%   31.0%  double     6 (6 stand)
+  5,5 vs 3                    0.000440   0.0037297%    3.3%   34.3%  double     4 (4 hit)
+  soft 16 vs 5 (2 cards)      0.000881   0.0033564%    3.0%   37.3%  double     7 (7 hit)
+  soft 16 vs 6 (2 cards)      0.000919   0.0030899%    2.7%   40.0%  double     4 (4 hit)
+  soft 18 vs 5 (2 cards)      0.000919   0.0027839%    2.4%   42.4%  double     3 (3 stand)
+  soft 17 vs 5 (2 cards)      0.000919   0.0027270%    2.4%   44.8%  double     3 (3 hit)
+  hard 16 vs 7                0.004473   0.0026829%    2.4%   47.2%  hit        1 (1 stand)
+  hard 9 vs 5 (2 cards)       0.002719   0.0026013%    2.3%   49.5%  double     1 (1 hit)
+  hard 11 vs 9 (2 cards)      0.003638   0.0025743%    2.3%   51.7%  double     1 (1 hit)
+  soft 14 vs 6 (2 cards)      0.000919   0.0025450%    2.2%   54.0%  double     6 (6 hit)
+  soft 15 vs 5 (2 cards)      0.000919   0.0025322%    2.2%   56.2%  double     7 (7 hit)
+  hard 12 vs 6 (2 cards)      0.006434   0.0021506%    1.9%   58.1%  stand      2 (2 hit)
+  A,A vs A                    0.000404   0.0020785%    1.8%   59.9%  split      5 (5 hit)
+  5,5 vs 8                    0.000440   0.0020589%    1.8%   61.7%  double     5 (5 hit)
+
+Check: itemised 0.113684415903% = mean learning error 0.113684415903% (|diff| 1.1e-17)
