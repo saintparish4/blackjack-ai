@@ -113,6 +113,7 @@ target_link_libraries(blackjack_solver PUBLIC blackjack_ai)
 # === Training (depends on AI) ===
 set(TRAINING_SOURCES
     include/training/ConvergenceReport.cpp
+    include/training/EngineAudit.cpp
     include/training/Evaluator.cpp
     include/training/Experiment.cpp
     include/training/Logger.cpp
@@ -167,6 +168,7 @@ set(TEST_SOURCES
     tests/test_agents.cpp
     tests/test_counting.cpp
     tests/test_solver.cpp
+    tests/test_engine_audit.cpp
 )
 
 add_executable(run_tests ${TEST_SOURCES})
@@ -196,6 +198,10 @@ target_link_libraries(play blackjack_training)
 # === Solver Executable (exact EVs, Farmer-comparable output) ===
 add_executable(solve scripts/solve.cpp)
 target_link_libraries(solve blackjack_training)
+
+# === Audit Executable (engine vs exact solver) ===
+add_executable(audit scripts/audit.cpp)
+target_link_libraries(audit blackjack_training)
 
 # === Experiment Executable (one config over N seeds) ===
 add_executable(experiment scripts/experiment.cpp)
@@ -228,4 +234,5 @@ message(STATUS "  - benchmark (executable)")
 message(STATUS "  - play (executable)")
 message(STATUS "  - experiment (executable)")
 message(STATUS "  - solve (executable)")
+message(STATUS "  - audit (executable)")
 message(STATUS "=================================")

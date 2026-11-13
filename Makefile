@@ -51,7 +51,7 @@ SAN_ENV = ASAN_OPTIONS=detect_leaks=1:abort_on_error=1 \
 .PHONY: help configure reconfigure build debug native rebuild \
         test test-verbose ctest asan test-asan smoke ci \
         train play report benchmark experiment syntax \
-        solve farmer compare-solver \
+        solve audit farmer compare-solver \
         wasm serve web-test venv publish exp001 exp002 \
         clean clean-artifacts distclean
 
@@ -171,6 +171,9 @@ experiment: build ## Run one config over N seeds (ARGS="--config ../config/tuned
 
 solve: build ## Exact solver: strategy, EV by upcard, dealer table (ARGS="--decks 1 --h17")
 	cd $(CORE) && $(BUILD)/solve $(ARGS)
+
+audit: build ## Engine vs exact solver, every preset (ARGS="--rounds 20000000 --cut-card-rounds 20000000")
+	cd $(CORE) && $(BUILD)/audit $(ARGS)
 
 farmer: ## Fetch and build Farmer's CA into tools/farmer/bin (once)
 	bash $(ROOT)/tools/farmer/run_farmer.sh --build-only
