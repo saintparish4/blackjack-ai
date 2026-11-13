@@ -205,6 +205,10 @@ target_link_libraries(solve blackjack_training)
 add_executable(audit scripts/audit.cpp)
 target_link_libraries(audit blackjack_training)
 
+# === Regret Executable (exact grading of learned agents) ===
+add_executable(regret scripts/regret.cpp)
+target_link_libraries(regret blackjack_training)
+
 # === Experiment Executable (one config over N seeds) ===
 add_executable(experiment scripts/experiment.cpp)
 target_link_libraries(experiment blackjack_training)
@@ -237,4 +241,5 @@ message(STATUS "  - play (executable)")
 message(STATUS "  - experiment (executable)")
 message(STATUS "  - solve (executable)")
 message(STATUS "  - audit (executable)")
+message(STATUS "  - regret (executable)")
 message(STATUS "=================================")
