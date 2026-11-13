@@ -88,6 +88,7 @@ endif()
 
 # === AI Library ===
 set(AI_SOURCES
+    include/ai/CountingAgent.cpp
     include/ai/State.cpp
     include/ai/PolicyTable.cpp
     include/ai/TabularAgent.cpp
@@ -172,6 +173,7 @@ set(TEST_SOURCES
     tests/test_solver.cpp
     tests/test_engine_audit.cpp
     tests/test_regret.cpp
+    tests/test_counting_agent.cpp
     tests/test_count_analysis.cpp
 )
 

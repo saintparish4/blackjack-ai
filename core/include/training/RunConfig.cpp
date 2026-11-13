@@ -90,11 +90,22 @@ RunConfig loadRunConfig(const util::ConfigParser &cfg,
   // ---- Agent ----
   run.agentType = cfg.getString("agent", "q-learning");
   if (run.agentType != "q-learning" && run.agentType != "expected-sarsa" &&
-      run.agentType != "double-q" && run.agentType != "basic-strategy") {
+      run.agentType != "double-q" && run.agentType != "basic-strategy" &&
+      run.agentType != "counting") {
     throw std::invalid_argument(
         "unknown agent '" + run.agentType +
-        "' (expected q-learning, expected-sarsa, double-q, basic-strategy)");
+        "' (expected q-learning, expected-sarsa, double-q, basic-strategy, counting)");
   }
+  ai::CountingAgent::Options &c = run.counting;
+  c.prior = ai::CountingAgent::priorFromString(cfg.getString("count_prior", "none"));
+  c.priorVisits = cfg.getDouble("count_prior_visits", 100.0);
+  c.priorModel = cfg.getString("count_prior_model", "");
+  c.representation =
+      ai::CountingAgent::representationFromString(cfg.getString("representation", "table"));
+  c.exploration =
+      ai::CountingAgent::explorationFromString(cfg.getString("exploration", "epsilon"));
+  c.ucbC = cfg.getDouble("ucb_c", 1.0);
+  c.target = ai::CountingAgent::targetFromString(cfg.getString("target", "td"));
   ai::TabularAgent::Hyperparameters &p = run.agentParams;
   p.learningRate   = cfg.getDouble("learning_rate", 0.1);
   p.discountFactor = cfg.getDouble("discount_factor", 0.95);
@@ -176,6 +187,9 @@ std::shared_ptr<ai::TabularAgent> makeAgent(const RunConfig &run,
   }
   if (run.agentType == "double-q") {
     return std::make_shared<ai::DoubleQLearningAgent>(run.agentParams, agentSeed);
+  }
+  if (run.agentType == "counting") {
+    return std::make_shared<ai::CountingAgent>(run.agentParams, run.counting, agentSeed);
   }
   if (run.agentType == "basic-strategy") {
     return std::make_shared<BookBettorAgent>(run.training.gameRules,

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../ai/CountingAgent.hpp"
 #include "../ai/TabularAgent.hpp"
 #include "../game/GameRules.hpp"
 #include "../util/ConfigParser.hpp"
@@ -23,8 +24,10 @@ struct RunConfig {
   TrainingConfig training;
   ai::TabularAgent::Hyperparameters agentParams;
   /// q-learning | expected-sarsa | double-q | basic-strategy (plays the book;
-  /// only its bets are learned, if learn_bets is set)
+  /// only its bets are learned, if learn_bets is set) | counting (experiment
+  /// 005's learners, configured by `counting`)
   std::string agentType = "q-learning";
+  ai::CountingAgent::Options counting;
   std::string rulesPreset = "vegas-strip";
 };
 
