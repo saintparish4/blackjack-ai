@@ -21,6 +21,7 @@ The ground rules:
 | 002 | [card-counting](002-card-counting/) | Can the agent learn to beat the house by counting cards? | It learns *when to bet*: +0.27% ± 0.05 per unit wagered on 10 fresh seeds (flat basic strategy −0.58%), beating textbook Hi-Lo's ramp and tying Hi-Lo + Illustrious 18. Putting the count into its playing state failed: −0.10% ± 0.13 |
 | 003 | [ground-truth](003-ground-truth/) | Does anything survive contact with code nobody here wrote? | An exact solver agrees with Farmer's CA and Wizard of Odds to every published digit on five rule sets; the engine matches it on 104 audited quantities (max \|z\| 2.59); three rule flags and one preset were fiction and are deleted |
 | 004 | [regret](004-regret/) | Where does the agent's shortfall go, and how much is learnable? | Exactly 0.00112 ± 0.00029 per round short of the book (001's Monte Carlo said 0.0017); 99% is learning error, 0.0015% the representation's ceiling; Farmer's code reproduces all ten learned policies' EVs to nine decimals |
+| 005 | [index-plays](005-index-plays/) | Can a learner rediscover the Illustrious 18 within one true count? | Yes. A learner linear in the true count finds 16.2 ± 0.7 of 17 within ±1 on fresh seeds (count-blind floor 2). 002's per-bucket table was starved, not wrong: 12.3 at six times its budget. Exploring starts, the predicted winner, failed |
 
 ## Algorithm leaderboard
 
