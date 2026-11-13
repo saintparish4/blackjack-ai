@@ -2,7 +2,9 @@
 
 #include <cmath>
 #include <limits>
+#include <map>
 #include <stdexcept>
+#include <tuple>
 #include <vector>
 
 namespace blackjack {
@@ -92,7 +94,8 @@ struct Solver::Node {
   std::array<double, 11> stand{};
   std::array<double, 11> hit{};
   std::array<double, 11> dbl{};    ///< Two-card hands only
-  std::array<double, 11> chosen{}; ///< The policy's play, where it can be asked
+  std::array<double, 11> chosen{}; ///< Value of the policy's play, where it is asked
+  std::array<Action, 11> action{};  ///< The policy's play, where it is asked
 };
 
 /// A context is a base shoe: the full shoe, or the full shoe less one extra
@@ -199,6 +202,7 @@ Solver::Node &Solver::node(Context &ctx, Composition &hand) {
       if (s.n[up] == 0) continue;
       if (splitAces) {
         n.chosen[up] = n.stand[up];
+        n.action[up] = Action::STAND;
         continue;
       }
       ActionValues own;
@@ -221,7 +225,8 @@ Solver::Node &Solver::node(Context &ctx, Composition &hand) {
         }
       }
       const HandInfo info{hand, up, canDouble, false, false, splitHand};
-      n.chosen[up] = own[policy_.choose(info, unsplit)];
+      n.action[up] = policy_.choose(info, unsplit);
+      n.chosen[up] = own[n.action[up]];
     }
   }
 
@@ -363,6 +368,140 @@ double Solver::expectedValue() {
     ev += shoe_.p(up) * expectedValue(up);
   }
   return ev;
+}
+
+namespace {
+
+/// Opening hands are the only two-card unsplit decisions.
+std::pair<int, int> cardsOf(const Composition &h) {
+  int first = 0, second = 0;
+  for (int r = 1; r <= 10; ++r)
+    for (int k = 0; k < h.c[r]; ++k) (first == 0 ? first : second) = r;
+  return {first, second};
+}
+
+} // namespace
+
+std::vector<Decision> Solver::decisions() {
+  // Ordered by card count first, so a node's children (one card more) always
+  // sort after it and the forward pass is a single sweep over the map.
+  using Key = std::tuple<int, int, uint64_t, int, bool>; // cards, pair, hand, up, canSplit
+  std::map<Key, Decision> open;
+  auto reachInto = [&](const Decision &d) {
+    const Key key{d.hand.cards, d.pairCard, d.hand.key(), d.upCard, d.canSplit};
+    auto it = open.find(key);
+    if (it == open.end()) open.emplace(key, d);
+    else it->second.reach += d.reach;
+  };
+
+  const double qSameTen = pairOfTensSameRank();
+  Shoe s = shoe_;
+  for (int up = 1; up <= 10; ++up) {
+    if (s.n[up] == 0) continue;
+    const double pUp = s.p(up);
+    s.remove(up);
+    for (int c1 = 1; c1 <= 10; ++c1) {
+      if (s.n[c1] == 0) continue;
+      const double p1 = pUp * s.p(c1);
+      s.remove(c1);
+      for (int c2 = 1; c2 <= 10; ++c2) {
+        if (s.n[c2] == 0) continue;
+        Decision d;
+        d.hand.add(c1);
+        d.hand.add(c2);
+        if (d.hand.total() == 21) continue; // a natural: nothing to decide
+        d.upCard = up;
+        d.canDouble = true;
+        d.canSurrender = rules_.surrender;
+        d.reach = p1 * s.p(c2);
+        if (c1 == c2 && c1 == TEN && rules_.splitIdenticalRanksOnly) {
+          Decision k = d;
+          k.canSplit = true;
+          k.reach *= qSameTen;
+          reachInto(k);
+          d.canSplit = false;
+          d.reach *= 1.0 - qSameTen;
+        } else {
+          d.canSplit = c1 == c2;
+        }
+        reachInto(d);
+      }
+      s.add(c1);
+    }
+    s.add(up);
+  }
+
+  std::vector<Decision> out;
+  for (auto &entry : open) {
+    Decision &d = entry.second;
+    d.action = decisionAction(d);
+    out.push_back(d);
+
+    if (d.action == Action::HIT) {
+      Shoe left = shoe_;
+      for (int r = 1; r <= 10; ++r) {
+        left.n[r] -= d.hand.c[r];
+        left.total -= d.hand.c[r];
+      }
+      if (d.pairCard != 0) left.remove(d.pairCard);
+      left.remove(d.upCard);
+      for (int c = 1; c <= 10; ++c) {
+        if (left.n[c] == 0) continue;
+        Decision child = d;
+        child.hand.add(c);
+        if (child.hand.bust()) continue;
+        child.reach = d.reach * left.p(c);
+        child.canDouble = false;
+        child.canSplit = false;
+        child.canSurrender = false;
+        reachInto(child);
+      }
+    } else if (d.action == Action::SPLIT) {
+      const int x = cardsOf(d.hand).first;
+      if (x == ACE) continue; // split aces take one card each: no decisions
+      Shoe left = shoe_;
+      left.remove(x);
+      left.remove(x);
+      left.remove(d.upCard);
+      for (int c = 1; c <= 10; ++c) {
+        if (left.n[c] == 0) continue;
+        Decision half;
+        half.pairCard = x;
+        half.hand.add(x);
+        half.hand.add(c);
+        half.upCard = d.upCard;
+        half.canDouble = rules_.doubleAfterSplit;
+        half.reach = 2.0 * d.reach * left.p(c); // two halves
+        reachInto(half);
+      }
+    }
+  }
+  return out;
+}
+
+ActionValues Solver::decisionValues(const Decision &d) {
+  ActionValues v;
+  if (d.pairCard == 0 && d.hand.cards == 2) {
+    const auto [c1, c2] = cardsOf(d.hand);
+    v = openingValues(c1, c2, d.upCard);
+    if (!d.canSplit) v[Action::SPLIT] = NaN;
+    return v;
+  }
+  Composition h = d.hand;
+  Node &n = node(d.pairCard == 0 ? *main_ : splitContext(d.pairCard), h);
+  v[Action::STAND] = n.stand[d.upCard];
+  v[Action::HIT] = n.hit[d.upCard];
+  if (d.canDouble) v[Action::DOUBLE] = n.dbl[d.upCard];
+  return v;
+}
+
+Action Solver::decisionAction(const Decision &d) {
+  if (d.pairCard == 0 && d.hand.cards == 2) {
+    const auto [c1, c2] = cardsOf(d.hand);
+    return openingAction(c1, c2, d.upCard, d.canSplit);
+  }
+  Composition h = d.hand;
+  return node(d.pairCard == 0 ? *main_ : splitContext(d.pairCard), h).action[d.upCard];
 }
 
 std::array<DealerDist, 11> Solver::dealerOutcomes() const {

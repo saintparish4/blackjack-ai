@@ -38,6 +38,7 @@
 #include <array>
 #include <memory>
 #include <unordered_map>
+#include <vector>
 
 namespace blackjack {
 namespace solver {
@@ -129,6 +130,23 @@ private:
   int countBucket_;
 };
 
+/**
+ * One point where the policy decides, and the probability of reaching it.
+ * Reach is unconditional, like every value here: a dealer natural is inside
+ * the values, not subtracted from the reach. Each half of a split counts
+ * once, so a split pair's two halves together carry twice the pair's reach.
+ */
+struct Decision {
+  int pairCard = 0; ///< 0 for an unsplit hand, else the card this half was split from
+  Composition hand;
+  int upCard = 0;
+  bool canDouble = false;
+  bool canSplit = false;
+  bool canSurrender = false;
+  double reach = 0.0;
+  ai::Action action = ai::Action::STAND; ///< What this solver's policy plays here
+};
+
 class Solver {
 public:
   /** Solve a full shoe of rules.decks decks. */
@@ -166,6 +184,18 @@ public:
    * value just v / p.
    */
   ActionValues peekedValues(const Composition &hand, int upCard);
+
+  /**
+   * Every decision the policy reaches, aggregated by composition, with its
+   * reach probability. Summing reach x value of the chosen action over the
+   * opening decisions (plus the naturals) gives expectedValue().
+   */
+  std::vector<Decision> decisions();
+  /** This solver's EV of each legal action at a decision point, the policy
+   *  playing on afterwards. The decision may come from another solver. */
+  ActionValues decisionValues(const Decision &d);
+  /** This solver's policy's play at a decision point. */
+  ai::Action decisionAction(const Decision &d);
 
   /** Dealer outcomes for this shoe, by upcard (nothing removed but the upcard). */
   std::array<DealerDist, 11> dealerOutcomes() const;
