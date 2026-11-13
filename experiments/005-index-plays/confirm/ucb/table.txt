@@ -1,0 +1,31 @@
+Config     : /home/saint/msgd/blackjack-ai/experiments/005-index-plays/arms/ucb.cfg
+Agent      : counting, counts (Hi-Lo) (alpha = max(0, 1/(n+1)^1))
+Seeds      : 101..110
+
+    episodes  rediscovered of 17          per seed
+     1000000    4.5 +/-  0.9 ( 3- 6)       6 4 5 3 4 6 6 3 3 5 
+     3000000    5.8 +/-  1.0 ( 4- 8)       7 7 4 8 5 5 7 4 5 6 
+    10000000    9.0 +/-  1.5 ( 6-12)       11 10 7 9 6 10 11 6 12 8 
+    30000000   10.6 +/-  1.5 ( 6-13)       13 11 11 9 6 12 10 10 13 11 
+   100000000   12.2 +/-  0.9 (10-15)       15 12 12 12 11 12 10 12 13 13 
+   300000000   13.7 +/-  1.1 (11-16)       16 15 11 12 13 13 13 14 15 15 
+
+At 300000000 episodes, by play (seeds that rediscovered it; learned range)
+  16 v T   hit->stand  index +0  10/10  [ 0 0 0 0 -1 0 0 0 0 0 ]
+  15 v T   hit->stand  index +4  10/10  [ 4 3 4 3 3..5 5 3 3 5 4 ]
+  T,T v 5  stand->split  index +5  10/10  [ 6 6 5 5 6 6 6 6 6 6 ]
+  T,T v 6  stand->split  index +4   5/10  [ 5 5 6 6 6 5 6 6 5 5 ]
+  10 v T   hit->double index +4   4/10  [ 5 6 5 2..6 6 4..6 4..6 4 7 3..5 ]
+  12 v 3   hit->stand  index +2  10/10  [ 1 2 1 1 2 1 2 1 1 1 ]
+  12 v 2   hit->stand  index +3   9/10  [ 3 4 3 3 3 3 3 5 4 4 ]
+  11 v A   hit->double index +1   2/10  [ 5 7 7 4 2..4 5 3 4 2 2 ]
+  9 v 2    hit->double index +1   5/10  [ 2 1 2..4 2..4 1 4 6 1 6 0 ]
+  10 v A   hit->double index +4   6/10  [ 3 4 7 3 5..7 7 5 5 5 7 ]
+  9 v 7    hit->double index +3   7/10  [ 2..4 3 4..6 4..6 4 3 4 3 4 7 ]
+  16 v 9   hit->stand  index +5   9/10  [ 4 4..6 3 6 4 4 4..6 4..6 6 4 ]
+  13 v 2   hit->stand  index -1  10/10  [ -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 ]
+  12 v 4   hit->stand  index +0  10/10  [ 0 0 0 0 0 0 0 0 0 0 ]
+  12 v 5   hit->stand  index -2  10/10  [ -2 -2 -2 -2 -2 -2 -2 -2 -2 -2 ]
+  12 v 6   hit->stand  index -1  10/10  [ -2 -2 -2 -2 -1 -1 -1 -2 -1 -1 ]
+  13 v 3   hit->stand  index -2  10/10  [ -2 -2 -2 -2 -2 -2 -2 -2 -2 -2 ]
+

@@ -1,0 +1,31 @@
+Config     : /home/saint/msgd/blackjack-ai/experiments/005-index-plays/arms/linear-es.cfg
+Agent      : counting, counts (Hi-Lo) (alpha = max(0, 1/(n+1)^1))
+Seeds      : 1..5
+
+    episodes  rediscovered of 17          per seed
+     1000000    6.4 +/-  2.9 ( 4-10)       10 4 6 7 5 
+     3000000    6.6 +/-  1.7 ( 5- 8)       8 6 8 5 6 
+    10000000    7.0 +/-  1.5 ( 5- 8)       8 7 8 5 7 
+    30000000    7.4 +/-  1.4 ( 6- 9)       9 8 6 7 7 
+   100000000    8.6 +/-  1.9 ( 7-10)       10 9 7 7 10 
+   300000000    9.2 +/-  2.2 ( 7-11)       11 9 8 7 11 
+
+At 300000000 episodes, by play (seeds that rediscovered it; learned range)
+  16 v T   hit->stand  index +0   2/5  [ -3 -3 0 -1 -3 ]
+  15 v T   hit->stand  index +4   1/5  [ 0 -3 3 2 -3 ]
+  T,T v 5  stand->split  index +5   1/5  [ 7 7 6 7 7 ]
+  T,T v 6  stand->split  index +4   1/5  [ 5 7 7 7 7 ]
+  10 v T   hit->double index +4   1/5  [ -3 -3 4 1 -3 ]
+  12 v 3   hit->stand  index +2   3/5  [ 1 1 -1 -3 1 ]
+  12 v 2   hit->stand  index +3   3/5  [ 2 2 0 -3 2 ]
+  11 v A   hit->double index +1   5/5  [ 0 1 0 1 0 ]
+  9 v 2    hit->double index +1   3/5  [ 0 0 -2 -3 0 ]
+  10 v A   hit->double index +4   3/5  [ 2 3 2 3 3 ]
+  9 v 7    hit->double index +3   5/5  [ 2 2 2 3 3 ]
+  16 v 9   hit->stand  index +5   1/5  [ 0 -3 1 4 0 ]
+  13 v 2   hit->stand  index -1   3/5  [ -1 -1 -3 -3 -1 ]
+  12 v 4   hit->stand  index +0   2/5  [ -1 -3 -3 -2 -1 ]
+  12 v 5   hit->stand  index -2   5/5  [ -3 -3 -2 -3 -3 ]
+  12 v 6   hit->stand  index -1   2/5  [ -1 -3 -3 -3 -2 ]
+  13 v 3   hit->stand  index -2   5/5  [ -2 -2 -3 -3 -2 ]
+
