@@ -101,6 +101,7 @@ target_link_libraries(blackjack_ai PUBLIC blackjack_game)
 
 # === Exact solver (depends on AI for Action and State) ===
 set(SOLVER_SOURCES
+    include/solver/CountAnalysis.cpp
     include/solver/Dealer.cpp
     include/solver/InfiniteDeck.cpp
     include/solver/PolicyAnalysis.cpp
@@ -171,6 +172,7 @@ set(TEST_SOURCES
     tests/test_solver.cpp
     tests/test_engine_audit.cpp
     tests/test_regret.cpp
+    tests/test_count_analysis.cpp
 )
 
 add_executable(run_tests ${TEST_SOURCES})
