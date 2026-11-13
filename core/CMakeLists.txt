@@ -214,6 +214,10 @@ target_link_libraries(audit blackjack_training)
 add_executable(regret scripts/regret.cpp)
 target_link_libraries(regret blackjack_training)
 
+# === Indices Executable (rediscovery of the Illustrious 18) ===
+add_executable(indices scripts/indices.cpp)
+target_link_libraries(indices blackjack_training)
+
 # === Experiment Executable (one config over N seeds) ===
 add_executable(experiment scripts/experiment.cpp)
 target_link_libraries(experiment blackjack_training)
@@ -247,4 +251,5 @@ message(STATUS "  - experiment (executable)")
 message(STATUS "  - solve (executable)")
 message(STATUS "  - audit (executable)")
 message(STATUS "  - regret (executable)")
+message(STATUS "  - indices (executable)")
 message(STATUS "=================================")
