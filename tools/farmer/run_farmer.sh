@@ -11,7 +11,7 @@
 #
 #   tools/farmer/run_farmer.sh --build-only
 #
-# just fetches and builds.
+# just fetches and builds, including bin/policy_ev (see policy_ev.cpp).
 #
 # Farmer's code is GPL-3.0 and this repo is MIT, so it is never vendored:
 # it is cloned at a pinned commit into tools/farmer/src (gitignored) the
@@ -38,6 +38,10 @@ if [ ! -x "$BIN/strategy" ]; then
   g++ -O2 -w -I"$SRC/src" -I"$SRC/src/pdf" -o "$BIN/strategy" \
     "$SRC/src/strategy.cpp" "$SRC/src/blackjack.cpp" \
     "$SRC/src/pdf/blackjack_pdf.cpp" "$SRC/src/indices.cpp"
+fi
+if [ ! -x "$BIN/policy_ev" ] || [ "$HERE/policy_ev.cpp" -nt "$BIN/policy_ev" ]; then
+  g++ -O2 -w -I"$SRC/src" -o "$BIN/policy_ev" "$HERE/policy_ev.cpp" \
+    "$SRC/src/blackjack.cpp" "$SRC/src/indices.cpp"
 fi
 if [ "${1:-}" = "--build-only" ]; then exit 0; fi
 
