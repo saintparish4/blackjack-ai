@@ -21,7 +21,7 @@
  *  - One split, as the engine allows. A split is worth 2 x the EV of one hand
  *    that starts with the pair card, drawn from a shoe missing the other pair
  *    card (Farmer's SPL1 algorithm). Interaction between the two split hands'
- *    draws is not modelled; Phase 1 bounds its size against the engine.
+ *    draws is not modelled; training/EngineAudit.hpp bounds its size.
  *  - A Policy decides every action. OptimalPolicy is CDZ-: the best play for
  *    each composition, with the unsplit choice reused after a split.
  *    AgentPolicy plays any ai::Agent through the same State it sees in the
@@ -133,7 +133,7 @@ class Solver {
 public:
   /** Solve a full shoe of rules.decks decks. */
   Solver(const Rules &rules, const Policy &policy);
-  /** Solve a depleted shoe (Phase 4 uses this per round). */
+  /** Solve a depleted shoe, e.g. what is left partway through a dealt one. */
   Solver(const Rules &rules, const Shoe &shoe, const Policy &policy);
   ~Solver();
   Solver(const Solver &) = delete;
