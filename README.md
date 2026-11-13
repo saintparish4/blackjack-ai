@@ -3,7 +3,7 @@
 [![CI](https://github.com/saintparish4/blackjack-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/saintparish4/blackjack-ai/actions/workflows/ci.yml)
 [![C++17](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus&logoColor=white)](https://en.cppreference.com/w/cpp/17)
 [![CMake](https://img.shields.io/badge/build-CMake-064F8C?logo=cmake&logoColor=white)](https://cmake.org/)
-[![Tests](https://img.shields.io/badge/tests-166%20passing-3fb950)](core/tests)
+[![Tests](https://img.shields.io/badge/tests-207%20passing-3fb950)](core/tests)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
 **▶ [Play it in your browser](https://saintparish4.github.io/blackjack-ai/)**: play against the
@@ -12,18 +12,21 @@ nothing to install.
 
 A C++17 Q-learning agent that learns blackjack strategy from scratch through self-play — no rules,
 no lookup tables, no supervision. Starting from an all-zero Q-table, 5 million hands of trial and
-error land **within 0.002 per round of textbook basic strategy**: 99.6% of the expected-value gap
-between random play and the book, confirmed on ten fresh seeds. A 5M-hand run takes a few
-seconds.
+error land **0.0011 per round short of textbook basic strategy**, scored exactly by a
+combinatorial solver on ten fresh seeds ([write-up](experiments/004-regret/)). A 5M-hand run takes
+a few seconds.
 
 Given a Hi-Lo card count, it then measured its own edge at every count, rediscovering the
 rule-of-thumb counters learn from books: about half a percent per true count. It learned to bet on
 it, turning a −0.58% game into **+0.27% per unit wagered**. That beats textbook Hi-Lo's bet ramp,
 and ties Hi-Lo with the Illustrious 18 index plays while winning twice as much per round
-([write-up](experiments/002-card-counting/)).
+([write-up](experiments/002-card-counting/)). Once its Q-values were linear in the count, it also
+rediscovered those index plays on its own: **16.2 of the 17 within one true count** on fresh seeds
+([write-up](experiments/005-index-plays/)).
 
-Ships with an interactive play mode, a colour-coded strategy chart, an exhaustive post-training
-policy audit measured against in-engine baselines, a seeded experiment runner that makes every
+Ships with an exact combinatorial solver that agrees with an independent analyzer to every
+published digit, an interactive play mode, a colour-coded strategy chart, an exhaustive
+post-training policy audit measured against in-engine baselines, a seeded experiment runner that makes every
 number reproducible, and Python visualisation scripts.
 
 **It's an experimental lab.** Experiments so far:
@@ -32,6 +35,12 @@ number reproducible, and Python visualisation scripts.
 - put it in the [browser](web/)
 - [taught it to count cards](experiments/002-card-counting/), with an honest negative result on
   count-aware play
+- [checked everything against code nobody here wrote](experiments/003-ground-truth/): an exact
+  solver that matches Eric Farmer's analyzer and Wizard of Odds to every published digit, and the
+  engine audited against it
+- [re-graded the agent by exact regret](experiments/004-regret/), itemised by state
+- [taught the counter to play the count](experiments/005-index-plays/), closing 002's negative
+  result
 
 Progress and every tracked metric are in [`docs/progress.md`](docs/progress.md), and the
 experiment write-ups in [`experiments/`](experiments/).
@@ -81,9 +90,12 @@ Blackjack's per-round reward has a standard deviation near 1.15, which is why th
 with intervals rather than as bare means; a 2,000-round measurement of the same agent carries a
 ±0.05 error bar and can look like anything at all.
 
-Basic strategy is also a check on the engine. Over 20M rounds it measures −0.0061 ± 0.0004, in line
-with the published house edge for these rules (six decks, S17, no double after split, no resplits):
-about −0.005 to −0.006.
+The engine itself is audited against the exact solver ([experiment 003](experiments/003-ground-truth/)).
+Over 20M rounds per pass on each of four presets, 104 quantities (dealer bust rate by upcard,
+naturals, EV split by the opening play) land within 2.6 standard errors of their exact values. Off
+the top of a fresh shoe, the book chart is worth exactly −0.5819% per round on these rules (six
+decks, S17, no double after split, no resplits). The −0.0061 ± 0.0004 measured here over 20M rounds
+was dealt to a cut card at 75%, which costs a little more.
 
 ### Strategy accuracy — and why it reads lower than you might expect
 
@@ -150,9 +162,11 @@ each other:
 - 16 against a T
 - 9,9 against a 3
 
-Four times more training lifts accuracy but not EV. Pricing these cells properly needs exact
-per-action EVs (see the roadmap). The convergence report ranks every divergence by its Q-value
-margin and tags its context, so close calls are distinguishable from real errors.
+Four times more training lifts accuracy but not EV. [Experiment 004](experiments/004-regret/)
+prices every one of these cells exactly: no single leak dominates, and missed doubles (hard 9–11,
+soft hands, 5,5) and 16 against a T make up half the bill. The convergence report ranks every
+divergence by its Q-value margin and tags its context, so close calls are distinguishable from real
+errors.
 
 Run-to-run variance, measured in one command with
 `./build/experiment --config ../config/tuned.cfg --seeds 5`:
@@ -190,10 +204,12 @@ same shoes (Vegas Strip, 75% penetration):
   near a true count of +1, and it bets up there instead of climbing slowly.
 - **Against Hi-Lo with the Illustrious 18:** it's a tie on edge and on risk-adjusted terms. It wins
   twice as much per round because it bets bigger, which also means more risk.
-- **Playing the count failed.** Putting the count into the Q-table's state, so the agent could learn
-  index plays, didn't work: ten times the states spread the experience too thin, even over 50M
-  episodes. That's the next thing to fix
-  ([write-up and ideas](experiments/002-card-counting/#why-the-learned-counter-fails-to-learn-index-plays)).
+- **Playing the count failed here, then worked.** Putting the count into the Q-table's state, so
+  the agent could learn index plays, didn't work: ten times the states spread the experience too
+  thin, even over 50M episodes. [Experiment 005](experiments/005-index-plays/) worked out why from
+  the effects of removal (one table per count needs 10⁸–10⁹ episodes per play) and made the
+  Q-values linear in the true count instead. That agent rediscovers 16.2 ± 0.7 of the Illustrious
+  18's 17 plays within one count on fresh seeds.
 - **Penetration matters as the theory says:** at 50% nothing beats the game; at 90% everyone does
   better.
 
@@ -208,9 +224,11 @@ same shoes (Vegas Strip, 75% penetration):
 | **Training pipeline** | Episode loop, periodic evaluation, early stopping on audit accuracy or EV, progress bar, checkpoint saves on SIGINT |
 | **Lab bench** | `--seed` makes any run bit-for-bit reproducible; `./build/experiment` trains one config over N seeds in parallel and reports EV ± CI, gap recovered and accuracy, with CSVs |
 | **Strategy validation** | Exhaustive convergence report vs basic strategy for the engine's rules (S17/H17 aware), split into two-card, multi-card and pair contexts, with coverage reporting |
+| **Exact solver** | Exact EV of any policy off any shoe (`solve`), agreeing with Eric Farmer's combinatorial analyzer digit for digit on five rule sets, diffed against it in CI; effects of removal and linear index estimates |
+| **Exact grading** | `audit` checks the engine's tallies against exact values, line by line, as z-scores; `regret` itemises a learned agent's EV loss by state against the best policy its state can express, and Farmer's code reproduces each graded EV |
 | **EV baselines** | In-engine basic-strategy and random-play agents; every run reports agent vs book vs random EV with confidence intervals |
 | **Color-coded chart** | Terminal strategy grid — green = correct, red = wrong, yellow = uncertain |
-| **Card counting** | Hi-Lo running count of visible cards (hole card only once revealed) and true count in the engine; optional count bucket in the agent's state; learned bet sizing from the agent's measured edge per count; textbook Hi-Lo baselines with a 1–8 ramp and the Illustrious 18; EV per unit wagered, units per 100 rounds and desirability index |
+| **Card counting** | Hi-Lo running count of visible cards (hole card only once revealed) and true count in the engine; optional count bucket in the agent's state; learned bet sizing from the agent's measured edge per count; textbook Hi-Lo baselines with a 1–8 ramp and the Illustrious 18; EV per unit wagered, units per 100 rounds and desirability index; a counting learner with count-blind priors, a linear-in-count representation, UCB, exploring starts and Monte Carlo targets, scored on rediscovering the index plays (`indices`) |
 | **Browser demo** | The engine, model and book chart compiled to WebAssembly; Play / Coach / Watch modes with Q-value bars, per-move cost estimates, a 10-hand scorecard and seeded replays; deployed to GitHub Pages by CI |
 | **Interactive play** | `./play --mode human|ai|advisor` — play yourself, watch the AI, or get move-by-move advice; `--seed` replays a session |
 | **Beginner mode** | Plain-English card explanations, chip balance, AI reasoning in natural language |
@@ -492,12 +510,13 @@ blackjack-ai/
 ├── core/
 │   ├── include/
 │   │   ├── game/          # Card, Deck, Hand, BlackjackGame, GameRules
-│   │   ├── ai/            # TabularAgent + Q-learning / Expected SARSA / Double Q, State, PolicyTable, GameStateConverter
-│   │   ├── training/      # Trainer, Evaluator, Experiment, RunConfig, Logger, ConvergenceReport, StrategyChart
+│   │   ├── ai/            # TabularAgent + Q-learning / Expected SARSA / Double Q, CountingAgent, State, PolicyTable, GameStateConverter
+│   │   ├── solver/        # Exact solver, Dealer, Shoe, PolicyAnalysis (regret), CountAnalysis (effects of removal), InfiniteDeck
+│   │   ├── training/      # Trainer, Evaluator, Experiment, RunConfig, Logger, ConvergenceReport, StrategyChart, EngineAudit, IndexDiscovery
 │   │   └── util/          # ArgParser, ConfigParser, ProgressBar, Seed
 │   ├── bindings/wasm/     # Embind API for the browser demo
-│   ├── scripts/           # train.cpp, play.cpp, experiment.cpp, benchmark.cpp
-│   └── tests/             # 166 unit tests (Google Test)
+│   ├── scripts/           # train, play, experiment, benchmark, solve, audit, regret, indices
+│   └── tests/             # 207 unit tests (Google Test)
 ├── analysis/
 │   ├── plot_training.py   # Python visualisation script
 │   ├── ansi_to_png.py     # Renders coloured terminal output to PNG
@@ -508,6 +527,7 @@ blackjack-ai/
 │   ├── default.cfg        # INI config template
 │   └── tuned.cfg          # Settings behind the published results
 ├── experiments/           # Lab notebook: one folder per experiment, with results CSVs
+├── tools/farmer/          # Fetches and builds Eric Farmer's CA (GPL-3.0, not vendored) as an external reference
 ├── web/                   # Browser demo: page, coaching logic, published model, smoke test
 └── docs/
     ├── images/            # Plots and terminal captures used in this README
@@ -515,7 +535,8 @@ blackjack-ai/
     └── training_report.txt # Full report from the published run
 ```
 
-Three static libraries are linked together: `blackjack_game` → `blackjack_ai` → `blackjack_training`.
+Four static libraries are linked together: `blackjack_game` → `blackjack_ai` → `blackjack_solver` →
+`blackjack_training`.
 Under Emscripten, CMake instead builds one `blackjack_wasm` module from the game and AI sources plus
 the basic strategy chart: no threads, tests or CLI tools.
 
@@ -537,9 +558,16 @@ the basic strategy chart: no threads, tests or CLI tools.
 
   All three save the same `.qtable` format, so `play` and the audit load any of them. A split bootstraps from both resulting hands.
 - **`PolicyTable`** — the Q-table itself, plus a per-action visit count. The count is what separates "the agent evaluated this action and disliked it" from "this action was never legal here, so its Q is still 0.0"; both leave a Q-value, only the first is a decision, and treating them alike lets an untrained action win a greedy argmax.
+- **`CountingAgent`** — experiment 005's learners as options on `QLearningAgent`: a count-blind prior (frozen or pooled), Q linear in the true count, UCB or exploring-starts exploration, Monte Carlo targets. With every option at its default it is experiment 002's learner, bit for bit.
 - **`GameStateConverter`** — converts game state → AI state, enumerates valid actions, executes chosen action.
 
-### Layer 3 — Training
+### Layer 3 — Exact solver
+
+- **`Solver`** — exact EV of any `Policy` off any shoe composition, by combinatorial analysis: every action for every hand composition against every upcard, plus every decision the policy reaches and its probability. `OptimalPolicy` is composition-dependent optimal play; `AgentPolicy` plays any `ai::Agent` on the exact `State` the engine would give it.
+- **`PolicyAnalysis`** — regret by state via the performance-difference identity (the lines sum to the EV gap exactly), the best total-dependent policy by policy iteration, and export to Farmer's format.
+- **`CountAnalysis`** — exact effects of removal, a count's betting and playing correlations, and Griffin's linear index estimates.
+
+### Layer 4 — Training
 
 - **`Trainer`** — episode loop, periodic evaluation, progress bar, early stopping, checkpoint saves. Runs the convergence report and saves `analysis/training_report.txt` at the end of every `train()` call.
 - **`Evaluator`** — exploitation-mode evaluation, reward standard error, `compareAgainstBaselines` (agent vs book vs random on the same rules), and the shared `legalActionsFor` / `buildAuditStates` definitions used by every audit and chart. Seedable: each call deals a fresh shoe derived from the seed.
@@ -549,6 +577,8 @@ the basic strategy chart: no threads, tests or CLI tools.
 - **`ConvergenceReport`** — exhaustive policy audit over three hand contexts: all `(playerTotal 4–21) × (dealerCard 1–10) × (soft/hard)` states for two-card and multi-card hands, plus all 100 opening pairs, scored separately; divergences sorted by Q-value margin; coverage gaps reported rather than scored.
 - **`BasicStrategy`** — the reference chart for the engine's actual rules (dealer peek, one split, split aces one card, no double after split), with soft doubles, double-else-stand cells, and S17/H17 differences taken from `GameRules`.
 - **`StrategyChart`** — colour-coded terminal grids for hard totals, soft totals and pairs (green / red / yellow per cell).
+- **`EngineAudit`** — plays rounds through the engine and compares each tallied quantity with its exact value as a z-score.
+- **`IndexDiscovery`** — scores a count-aware agent's learned index plays against the Illustrious 18.
 - **`Logger`** — writes CSV training logs to disk.
 
 ### Reward Design
@@ -592,6 +622,18 @@ Across seeds 1–5: EV −0.0098 to −0.0049, EV gap recovered 98.8–100.6%, o
 94.9–97.1%, two-card accuracy 92.9–95.4%. Experiment 001's full sweep (18 arms explored, 7
 confirmed on fresh seeds) reruns with `experiments/001-double-down/run.sh all`.
 
+The exact results rerun from the repo root:
+
+```bash
+make compare-solver   # 003: the solver against Farmer's CA on five rule sets
+make audit ARGS="--rounds 20000000 --cut-card-rounds 20000000"   # 003: the engine audit
+make exp005 ARGS=theory   # 005: what the effects of removal predict, ~25 s
+```
+
+Experiment 004's agents and bill regenerate with the commands in
+[its write-up](experiments/004-regret/#reproduce); experiment 005's runs with
+`make exp005 ARGS=explore`, then `ARGS=confirm`.
+
 ---
 
 ## Benchmark
@@ -612,7 +654,7 @@ expect different figures elsewhere.
 
 ## Roadmap
 
-The project is now an experimental lab. The next four steps, in order, with live status and metrics
+The project is now an experimental lab. The steps so far, in order, with live status and metrics
 in [`docs/progress.md`](docs/progress.md):
 
 1. **Lab bench** ✅ — seeds, a multi-seed experiment runner, early stopping on accuracy or EV.
@@ -622,15 +664,19 @@ in [`docs/progress.md`](docs/progress.md):
    ([`web/`](web/)).
 4. **Card counting** ✅ — learned bet sizing beats textbook Hi-Lo's ramp and ties Hi-Lo + I18;
    count-aware play didn't learn yet ([write-up](experiments/002-card-counting/)).
+5. **Ground truth** ✅ — an exact solver that matches Farmer's CA and Wizard of Odds, the engine
+   audited against it, and three rule flags that were never played deleted
+   ([write-up](experiments/003-ground-truth/)).
+6. **Exact regret** ✅ — the agent's shortfall priced state by state; 99% of it is learning error
+   ([write-up](experiments/004-regret/)).
+7. **Index plays** ✅ — a learner linear in the true count rediscovers 16.2 of the Illustrious 18's
+   17 plays ([write-up](experiments/005-index-plays/)).
 
 Next candidates:
 
-- **Teach the counter to play the count:** warm-start count buckets from the count-blind table, or
-  share statistics across neighbouring counts.
-- **Bankroll science:** Kelly sizing, risk of ruin and drawdowns, now that bets exist.
-- **An exact dynamic-programming solver** to replace the hand-written chart and price every mistake.
-- **Full engine rules:** double after split, resplits.
-- **An algorithm leaderboard:** Monte Carlo control, SARSA(λ).
+- **Bankroll science:** Kelly sizing from the exact edge at each count, risk of ruin and drawdowns.
+- **Full engine rules:** double after split, resplits, no hole card.
+- **An algorithm leaderboard:** SARSA(λ) and others, graded by exact regret.
 
 ---
 
