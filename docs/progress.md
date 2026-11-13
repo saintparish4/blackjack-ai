@@ -25,7 +25,7 @@ _Last updated 2026-11-12, after steps 5–7 (ground truth, exact regret, index p
 | | Book chart EV, exact, off the top (6D S17 NDAS) | −0.581853% per round, 0.0031% behind CD optimal | `./build/audit` (exact column) |
 | **Engine** | Engine vs solver, 104 quantities, 4 presets × 20M rounds per pass | all within 2.6 SE (max \|z\| 2.59) | `./build/audit --rounds 20000000 --cut-card-rounds 20000000` |
 | | Basic strategy EV, 20M rounds, cut card at 75% | −0.0061 ± 0.0004 (exact off the top: −0.0058) | `./build/experiment --config ../config/tuned.cfg --seeds 4 --episodes 1000 --eval-rounds 5000000` |
-| **Engineering** | Unit tests | 207 passing, 20 suites | `./build/run_tests` |
+| **Engineering** | Unit tests | 207 passing, 19 suites | `./build/run_tests` |
 | | Training throughput | 1.1M episodes/s in the published run (machine shared with other jobs; 2.0–2.7M/s measured idle) | training report |
 | | Game simulation | 5.6–6.1M rounds/s (step 1 measurement) | `./build/benchmark` |
 | | Greedy decision latency | 3.9–4.5 ns (step 1 measurement) | `./build/benchmark` |
