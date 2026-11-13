@@ -71,9 +71,11 @@ each, so the three are directly comparable.
 The agent's interval overlaps basic strategy's. A single 200k-round run can't separate them. To
 check whether a gap remains, [experiment 001](experiments/001-double-down/) measured it on ten
 seeds that played no part in tuning, with a million rounds per policy each. The agent came in at
-**−0.0071 ± 0.0008** against the book's −0.0054 ± 0.0006. So it is genuinely close and genuinely not
-optimal: a shortfall of 0.0017 per round, 0.17% of a bet. Before that experiment the shortfall was
-0.026.
+**−0.0071 ± 0.0008** against the book's −0.0054 ± 0.0006. Scored exactly by the solver instead
+([experiment 004](experiments/004-regret/)), the same ten agents fall short of the book by
+**0.00112 ± 0.00029 per round**, 0.11% of a bet. The Monte Carlo book estimate had come out
+0.0004 lucky. 99% of what remains is learning error, not the agent's state representation.
+Before experiment 001 the shortfall was 0.0248.
 
 Blackjack's per-round reward has a standard deviation near 1.15, which is why these are reported
 with intervals rather than as bare means; a 2,000-round measurement of the same agent carries a
@@ -614,8 +616,8 @@ The project is now an experimental lab. The next four steps, in order, with live
 in [`docs/progress.md`](docs/progress.md):
 
 1. **Lab bench** ✅ — seeds, a multi-seed experiment runner, early stopping on accuracy or EV.
-2. **Teach it to double** ✅ — visit-scaled α won; the shortfall to basic strategy fell from 0.026 to
-   0.0017 per round ([write-up](experiments/001-double-down/)).
+2. **Teach it to double** ✅ — visit-scaled α won; the shortfall to basic strategy fell from 0.0248 to
+   0.0011 per round, exactly ([write-up](experiments/001-double-down/), [exact](experiments/004-regret/)).
 3. **Browser demo** ✅ — the engine compiled to WebAssembly with Play, Coach and Watch-the-AI modes
    ([`web/`](web/)).
 4. **Card counting** ✅ — learned bet sizing beats textbook Hi-Lo's ramp and ties Hi-Lo + I18;

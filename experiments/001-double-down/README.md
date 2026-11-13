@@ -1,5 +1,10 @@
 # 001: teach it to double
 
+> **Erratum (experiment 004).** Scored exactly, the confirmed shortfall below is **0.00112 ±
+> 0.00029** per round, not 0.0017, and the constant-α baseline's is 0.0248, not 0.026. Both were
+> differences of Monte Carlo estimates; the book's came out about 0.0004 lucky. The ranking of
+> the arms and every conclusion stand. See [004-regret](../004-regret/).
+
 **Question:** the Q-learning agent almost never doubled. It hit hard 10 and 11 where basic strategy
 doubles, and that was its biggest EV leak. Which change to the learner fixes that, and does it close
 the EV gap to basic strategy?

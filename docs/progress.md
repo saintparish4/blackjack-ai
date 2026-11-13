@@ -15,7 +15,7 @@ _Last updated 2026-09-19, after step 4 (card counting). All four next steps have
 | | Random play EV per round (same run) | −0.4443 ± 0.0057 | same run |
 | | EV gap recovered | **99.0%** | same run |
 | **Confirmed** | Agent vs book, 10 fresh seeds × 1M rounds | −0.0071 ± 0.0008 vs −0.0054 ± 0.0006 | `experiments/001-double-down/run.sh confirm` |
-| | Shortfall to basic strategy | **0.0017 per round** (was 0.026) | same |
+| | Shortfall to basic strategy | **0.00112 ± 0.00029 per round, exact** (was 0.0248; 001's Monte Carlo said 0.0017) | `experiments/004-regret/` |
 | **Spread** | EV gap recovered, seeds 1–5 | 99.7% ± 1.0 (range 98.8–100.6) | `./build/experiment --config ../config/tuned.cfg --seeds 5` |
 | | Agent EV, seeds 1–5 | −0.0076 ± 0.0024 (range −0.0098 to −0.0049) | same |
 | **Policy** | Accuracy: overall / two-card / multi-card / pairs | 94.9% / 92.9% / 97.8% / 92.0% | seed 1 |
