@@ -52,7 +52,7 @@ SAN_ENV = ASAN_OPTIONS=detect_leaks=1:abort_on_error=1 \
         test test-verbose ctest asan test-asan smoke ci \
         train play report benchmark experiment syntax \
         solve audit farmer compare-solver \
-        wasm serve web-test venv publish exp001 exp002 \
+        wasm serve web-test venv publish exp001 exp002 exp005 \
         clean clean-artifacts distclean
 
 ## ---- Build ---------------------------------------------------------------
@@ -213,6 +213,9 @@ exp001: build ## Rerun experiment 001 (double down): explore + confirm
 
 exp002: build ## Rerun experiment 002 (card counting): ARGS=explore|confirm|all
 	bash $(ROOT)/experiments/002-card-counting/run.sh $(if $(ARGS),$(ARGS),all)
+
+exp005: build ## Rerun experiment 005 (index plays): ARGS=theory|explore|confirm|all
+	bash $(ROOT)/experiments/005-index-plays/run.sh $(if $(ARGS),$(ARGS),all)
 
 ## ---- Clean ---------------------------------------------------------------
 
