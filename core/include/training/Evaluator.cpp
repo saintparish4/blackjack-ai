@@ -278,17 +278,13 @@ int HiLoAgent::rampUnits(int trueCountFloor, int maxBet) {
   return std::max(1, std::min(units, maxBet));
 }
 
-std::optional<ai::Action> HiLoAgent::indexPlay(const ai::State &state, int tc) {
+const std::vector<IndexPlay> &illustrious18() {
   using ai::Action;
-  if (state.hasUsableAce) return std::nullopt; // all 17 are hard hands or T,T
-  const int p = state.playerTotal;
-  const int d = state.dealerUpCard; // ace = 1
-
-  // Each index: at or above it, play the deviation; below it, the other play.
-  struct Index { int total, dealer, index; Action atOrAbove, below; };
-  static const Index kIndices[] = {
+  static const std::vector<IndexPlay> plays = {
       {16, 10, 0, Action::STAND, Action::HIT},
       {15, 10, 4, Action::STAND, Action::HIT},
+      {20, 5, 5, Action::SPLIT, Action::STAND, true},
+      {20, 6, 4, Action::SPLIT, Action::STAND, true},
       {10, 10, 4, Action::DOUBLE, Action::HIT},
       {12, 3, 2, Action::STAND, Action::HIT},
       {12, 2, 3, Action::STAND, Action::HIT},
@@ -303,17 +299,17 @@ std::optional<ai::Action> HiLoAgent::indexPlay(const ai::State &state, int tc) {
       {12, 6, -1, Action::STAND, Action::HIT},
       {13, 3, -2, Action::STAND, Action::HIT},
   };
+  return plays;
+}
 
-  if (state.canSplit) {
-    // T,T splits against a 5 at +5 and a 6 at +4; every other pair plays by
-    // the book (a pair of 8s is not a hard 16 for index purposes).
-    if (p == 20 && (d == 5 || d == 6)) {
-      return tc >= (d == 5 ? 5 : 4) ? Action::SPLIT : Action::STAND;
-    }
-    return std::nullopt;
-  }
-  for (const Index &ix : kIndices) {
-    if (ix.total != p || ix.dealer != d) continue;
+std::optional<ai::Action> HiLoAgent::indexPlay(const ai::State &state, int tc) {
+  using ai::Action;
+  if (state.hasUsableAce) return std::nullopt; // all are hard hands or T,T
+  for (const IndexPlay &ix : illustrious18()) {
+    if (ix.total != state.playerTotal || ix.dealer != state.dealerUpCard) continue;
+    // A pair of 8s is not a hard 16 for index purposes, and T,T plays only
+    // apply to a hand that can split.
+    if (ix.pair != state.canSplit) continue;
     Action play = tc >= ix.index ? ix.atOrAbove : ix.below;
     // A double index on a hand that has already hit falls back to hitting.
     if (play == Action::DOUBLE && !state.canDouble) play = Action::HIT;

@@ -253,6 +253,27 @@ private:
 };
 
 /**
+ * One of the Illustrious 18: at a true count of `index` or above play
+ * `atOrAbove`, below it play `below`. `pair` marks the two T,T split plays;
+ * every other entry is a hard total (two cards or more).
+ */
+struct IndexPlay {
+  int total;
+  int dealer; ///< Ace = 1
+  int index;
+  ai::Action atOrAbove;
+  ai::Action below;
+  bool pair = false;
+};
+
+/**
+ * Schlesinger's S17 multi-deck Illustrious 18 without insurance (the table
+ * doesn't offer it): 17 plays, most valuable first. The one source for both
+ * HiLoAgent's index plays and the targets a learned counter is scored on.
+ */
+const std::vector<IndexPlay> &illustrious18();
+
+/**
  * @brief Textbook Hi-Lo counter: basic strategy plus a bet ramp, optionally
  * with the Illustrious 18 index plays.
  *
