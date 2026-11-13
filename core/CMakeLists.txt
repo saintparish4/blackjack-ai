@@ -103,6 +103,7 @@ target_link_libraries(blackjack_ai PUBLIC blackjack_game)
 set(SOLVER_SOURCES
     include/solver/Dealer.cpp
     include/solver/InfiniteDeck.cpp
+    include/solver/PolicyAnalysis.cpp
     include/solver/Solver.cpp
 )
 
@@ -169,6 +170,7 @@ set(TEST_SOURCES
     tests/test_counting.cpp
     tests/test_solver.cpp
     tests/test_engine_audit.cpp
+    tests/test_regret.cpp
 )
 
 add_executable(run_tests ${TEST_SOURCES})
