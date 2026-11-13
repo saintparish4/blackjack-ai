@@ -1,5 +1,11 @@
 # 002: teach it to count cards
 
+> **Follow-up (experiment 005).** The negative result on count-aware play below is closed. A
+> learner whose Q-values are linear in the true count rediscovers 16.2 ± 0.7 of the Illustrious
+> 18's 17 plays within one count on fresh seeds. This experiment's per-bucket table, given six
+> times its budget, reaches 12.3: it was starved, not wrong, as the effects of removal predict.
+> See [005-index-plays](../005-index-plays/).
+
 **Question:** can the agent learn to beat the house? Counting cards is the one known way. Can it
 learn to bet more when the shoe is rich in tens and aces, and learn to play differently when it
 is?
