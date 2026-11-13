@@ -117,6 +117,7 @@ target_link_libraries(blackjack_solver PUBLIC blackjack_ai)
 set(TRAINING_SOURCES
     include/training/ConvergenceReport.cpp
     include/training/EngineAudit.cpp
+    include/training/IndexDiscovery.cpp
     include/training/Evaluator.cpp
     include/training/Experiment.cpp
     include/training/Logger.cpp

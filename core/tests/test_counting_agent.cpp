@@ -6,6 +6,7 @@
 // arms would no longer be variations of one thing.
 
 #include "ai/CountingAgent.hpp"
+#include "training/IndexDiscovery.hpp"
 #include "training/Trainer.hpp"
 #include <gtest/gtest.h>
 
@@ -47,6 +48,32 @@ State countState(int total, int up, int bucket, bool canDouble = true) {
 Experience terminal(const State &s, Action a, double reward) {
   return Experience(s, a, reward, State(), true);
 }
+
+/** Prefers `deviation` exactly at buckets whose floor of TC is >= threshold. */
+class ThresholdAgent : public Agent {
+public:
+  ThresholdAgent(const IndexPlay &play, int threshold, int minBucketSeen = 1)
+      : play_(play), threshold_(threshold), minBucket_(minBucketSeen) {}
+  Action chooseAction(const State &, const std::vector<Action> &v, bool) override { return v[0]; }
+  void learn(const Experience &) override {}
+  double getQValue(const State &s, Action a) const override {
+    const bool deviate = trueCountOfBucket(s.countBucket) >= threshold_;
+    if (a == play_.atOrAbove) return deviate ? 1.0 : 0.0;
+    if (a == play_.below) return deviate ? 0.0 : 1.0;
+    return -1.0;
+  }
+  uint32_t getVisitCount(const State &s, Action) const override {
+    return s.countBucket >= minBucket_ ? 1 : 0;
+  }
+  void save(const std::string &) const override {}
+  void load(const std::string &) override {}
+  std::string getName() const override { return "threshold"; }
+
+private:
+  IndexPlay play_;
+  int threshold_;
+  int minBucket_;
+};
 
 } // namespace
 
@@ -198,4 +225,44 @@ TEST(CountingAgentTest, RejectsOptionsThatBreakTheShrinkageFormula) {
   auto blind = countingParams();
   blind.useCount = false;
   EXPECT_THROW(CountingAgent(blind, CountingAgent::Options{}), std::invalid_argument);
+}
+
+TEST(IndexDiscoveryTest, FindsAnExactThresholdAndCreditsItWithinOne) {
+  for (const IndexPlay &play : illustrious18()) {
+    for (int offset : {-2, -1, 0, 1, 2}) {
+      const int t = play.index + offset;
+      if (t < MIN_TRUE_COUNT || t > MAX_TRUE_COUNT) continue;
+      ThresholdAgent agent(play, t);
+      const auto learned = learnedIndices(agent);
+      const LearnedIndex *li = nullptr;
+      for (const auto &l : learned)
+        if (l.play.total == play.total && l.play.dealer == play.dealer && l.play.pair == play.pair)
+          li = &l;
+      ASSERT_NE(li, nullptr);
+      EXPECT_EQ(li->lowest, t);
+      EXPECT_EQ(li->highest, t);
+      EXPECT_EQ(li->mismatches, 0);
+      EXPECT_EQ(li->rediscovered, std::abs(offset) <= 1);
+    }
+  }
+}
+
+TEST(IndexDiscoveryTest, DoesNotCreditAThresholdTheDataCannotPinDown) {
+  // 15 v T, index +4, but the agent has only seen counts of +5 and +6 (where
+  // it stands). Any threshold up to +5 fits; the range, -3..+5, is not "+4".
+  const IndexPlay play = illustrious18()[1];
+  ASSERT_EQ(play.index, 4);
+  ThresholdAgent agent(play, 4, countBucketFor(5));
+  const LearnedIndex li = learnedIndices(agent)[1];
+  EXPECT_EQ(li.informedBuckets, 2);
+  EXPECT_EQ(li.lowest, MIN_TRUE_COUNT);
+  EXPECT_EQ(li.highest, 5);
+  EXPECT_FALSE(li.rediscovered);
+}
+
+TEST(IndexDiscoveryTest, AnAgentThatNeverTriedBothPlaysScoresNothing) {
+  QLearningAgent untrained(countingParams());
+  const auto learned = learnedIndices(untrained);
+  EXPECT_EQ(countRediscovered(learned), 0);
+  for (const auto &li : learned) EXPECT_EQ(li.informedBuckets, 0);
 }
